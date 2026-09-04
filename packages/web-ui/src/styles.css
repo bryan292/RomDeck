@@ -505,8 +505,8 @@ small {
 
 .result-list button {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 10px;
   width: 100%;
   min-height: 72px;
@@ -515,7 +515,8 @@ small {
 }
 
 .result-list button > .status-badge {
-  justify-self: start;
+  justify-self: end;
+  max-width: 100%;
 }
 
 .result-list button.selected-result {
@@ -567,8 +568,7 @@ small {
 .candidate-title-row strong {
   overflow: hidden;
   color: #ffffff;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .path-readout {
@@ -886,7 +886,7 @@ small {
   }
 }
 
-@media (max-width: 1160px) {
+@media (max-width: 1280px) {
   .candidate {
     grid-template-columns: 1fr;
   }

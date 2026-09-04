@@ -13,8 +13,8 @@ test("configure, search, resolve, and show installed library state", async ({ pa
   await openResolvedCandidate(page);
 
   await expect(page.getByRole("heading", { name: "Metroid Fusion" })).toBeVisible();
-  await expect(page.getByText("Metroid Fusion (USA).gba")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toBeEnabled();
+  await expect(page.getByText("Extracts: Metroid Fusion (USA).gba")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download + Extract" })).toBeEnabled();
 });
 
 test("minimum desktop viewport keeps candidate and installed panels readable", async ({ page }) => {
@@ -32,9 +32,17 @@ test("minimum desktop viewport keeps candidate and installed panels readable", a
 
   const candidateDetails = await page.locator(".candidate > div").first().boundingBox();
   const candidateActions = await page.locator(".candidate-actions").first().boundingBox();
+  const candidateReady = await page.locator(".candidate-title-row .status-badge").first().boundingBox();
+  const resultButton = await page.getByRole("button", { name: /Metroid Fusion metroid-fusion/i }).boundingBox();
+  const resultBadge = await page.locator(".result-list .status-badge").first().boundingBox();
   expect(candidateDetails).not.toBeNull();
   expect(candidateActions).not.toBeNull();
+  expect(candidateReady).not.toBeNull();
+  expect(resultButton).not.toBeNull();
+  expect(resultBadge).not.toBeNull();
   expect(rectanglesOverlap(candidateDetails!, candidateActions!)).toBe(false);
+  expect(rectanglesOverlap(candidateReady!, candidateActions!)).toBe(false);
+  expect(isContainedBy(resultBadge!, resultButton!)).toBe(true);
 
   const listBox = await page.locator(".compact-list").boundingBox();
   const firstRowBox = await page.locator(".installed-row").first().boundingBox();
@@ -65,6 +73,13 @@ function rectanglesOverlap(a: Rect, b: Rect): boolean {
     a.x + a.width > b.x &&
     a.y < b.y + b.height &&
     a.y + a.height > b.y;
+}
+
+function isContainedBy(inner: Rect, outer: Rect): boolean {
+  return inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.width <= outer.x + outer.width + 1 &&
+    inner.y + inner.height <= outer.y + outer.height + 1;
 }
 
 async function mockRomDeckApi(page: Page) {
@@ -174,23 +189,29 @@ async function mockRomDeckApi(page: Page) {
             itemId: "metroid-fusion",
             title: "Metroid Fusion",
             systemKey: "gba",
-            format: "GBA",
+            format: "Archive",
             files: [
               {
-                sourceUrl: "https://archive.org/download/metroid-fusion/Metroid%20Fusion%20%28USA%29.gba",
-                sourceName: "Metroid Fusion (USA).gba",
-                targetName: "Metroid Fusion (USA).gba",
+                sourceUrl: "https://archive.org/download/metroid-fusion/Metroid%20Fusion.zip",
+                sourceName: "Metroid Fusion.zip",
+                targetName: "Metroid Fusion.zip",
                 size: 8388608,
                 sha1: "7037807198c22a7d2b0807371d763779a84fdfcf"
               }
             ],
+            extractedFiles: [
+              {
+                name: "Metroid Fusion (USA).gba",
+                size: 8388608
+              }
+            ],
             fileCount: 1,
             totalSize: 8388608,
-            requiresExtraction: false,
+            requiresExtraction: true,
             canDownload: true,
             warnings: [],
             confidence: 0.95,
-            reason: "Selected direct .gba file"
+            reason: "ZIP contains Metroid Fusion (USA).gba"
           }
         ]
       });
