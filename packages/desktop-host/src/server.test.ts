@@ -1,0 +1,120 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import type { DownloadCandidate } from "@romdeck/core";
+import type { Server } from "node:http";
+
+const nativeFetch = globalThis.fetch.bind(globalThis);
+const configDir = await mkdtemp(join(tmpdir(), "romdeck-server-test-config-"));
+process.env.ROMDECK_CONFIG_DIR = configDir;
+
+const { createRomDeckServer } = await import("./server.js");
+const { saveConfig } = await import("./config.js");
+const { pathToFileUri } = await import("./files.js");
+
+const servers: Server[] = [];
+
+beforeAll(async () => {
+  await saveConfig({ version: 1, systems: {} });
+});
+
+afterEach(async () => {
+  vi.unstubAllGlobals();
+  await Promise.all(servers.map((server) => closeServer(server)));
+  servers.length = 0;
+});
+
+describe("desktop host HTTP API", () => {
+  it("converts file URIs to native paths for display", async () => {
+    const server = await listen();
+    const nativePath = join(configDir, "roms", "gba");
+    const response = await postJson<{ path: string }>(server, "/api/file-path", {
+      destinationUri: pathToFileUri(nativePath)
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.path).toBe(nativePath);
+  });
+
+  it("rejects downloads with unavailable destinations before provider fetch", async () => {
+    const missingPath = join(configDir, "missing", "gba");
+    await saveConfig({
+      version: 1,
+      systems: {
+        gba: {
+          enabled: true,
+          destinationUri: pathToFileUri(missingPath)
+        }
+      }
+    });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const server = await listen();
+
+    const response = await postJson<{ error: string }>(server, "/api/downloads", {
+      candidate: directGbaCandidate()
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Configured destination is not available");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+async function listen(): Promise<Server> {
+  const server = createRomDeckServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  servers.push(server);
+  return server;
+}
+
+async function postJson<T>(server: Server, path: string, body: unknown): Promise<{ status: number; body: T }> {
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Test server did not bind to a TCP port.");
+  }
+  const response = await nativeFetch(`http://127.0.0.1:${address.port}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  return {
+    status: response.status,
+    body: await response.json() as T
+  };
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+}
+
+function directGbaCandidate(): DownloadCandidate {
+  return {
+    id: "test|gba|direct",
+    source: "internet-archive",
+    itemId: "metroid-fusion",
+    title: "Metroid Fusion",
+    systemKey: "gba",
+    format: "GBA",
+    files: [
+      {
+        sourceUrl: "https://archive.org/download/metroid-fusion/Metroid%20Fusion.gba",
+        sourceName: "Metroid Fusion.gba",
+        targetName: "Metroid Fusion.gba",
+        size: 8388608
+      }
+    ],
+    fileCount: 1,
+    totalSize: 8388608,
+    requiresExtraction: false,
+    canDownload: true,
+    warnings: [],
+    confidence: 0.9,
+    reason: "direct GBA file"
+  };
+}

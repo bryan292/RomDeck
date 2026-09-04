@@ -29,7 +29,8 @@ onDownloadComplete(async () => {
   installedCache = await scanConfiguredSystems();
 });
 
-const server = createServer(async (request, response) => {
+export function createRomDeckServer() {
+  return createServer(async (request, response) => {
   const startedAt = Date.now();
   const requestPath = request.url ?? "/";
   let shouldLogRequest = true;
@@ -168,7 +169,12 @@ const server = createServer(async (request, response) => {
         sendError(response, 400, "System destination is not configured.");
         return;
       }
-      await validateWritableDirectory(systemConfig.destinationUri);
+      try {
+        await validateWritableDirectory(systemConfig.destinationUri);
+      } catch (error) {
+        sendError(response, 400, `Configured destination is not available: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
       const sourceFiles = await fetchInternetArchiveFiles(body.candidate.itemId);
       const resolvedCandidates = await enrichArchiveCandidates(resolveItemFiles({
         itemId: body.candidate.itemId,
@@ -207,13 +213,21 @@ const server = createServer(async (request, response) => {
       });
     }
   }
-});
+  });
+}
 
-await initializeDownloadHistory();
+export async function startRomDeckServer(port = PORT) {
+  await initializeDownloadHistory();
+  const server = createRomDeckServer();
+  server.listen(port, () => {
+    logInfo(`RomDeck desktop host listening on http://localhost:${port}`);
+  });
+  return server;
+}
 
-server.listen(PORT, () => {
-  logInfo(`RomDeck desktop host listening on http://localhost:${PORT}`);
-});
+if (process.env.VITEST !== "true") {
+  await startRomDeckServer();
+}
 
 async function scanConfiguredSystems() {
   const config = await loadConfig();
