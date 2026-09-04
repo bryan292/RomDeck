@@ -38,6 +38,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    },
     "resources": {
       "resources/host/": "host/"
     }

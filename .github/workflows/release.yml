@@ -126,13 +126,13 @@ jobs:
         include:
           - label: macOS Apple Silicon
             platform: macos-latest
-            args: --target aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg
             rust-targets: aarch64-apple-darwin
             node-platform: darwin
             node-arch: arm64
           - label: macOS Intel
             platform: macos-latest
-            args: --target x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg
             rust-targets: x86_64-apple-darwin
             node-platform: darwin
             node-arch: x64
@@ -144,7 +144,7 @@ jobs:
             node-arch: x64
           - label: Windows x64
             platform: windows-latest
-            args: ""
+            args: --bundles msi
             rust-targets: ""
             node-platform: win
             node-arch: x64
@@ -202,7 +202,33 @@ jobs:
             RomDeck desktop build.
 
             Current MVP package note: this build bundles the web UI, JS host resources, and a Node runtime for the local backend.
+
+            Current trust note: macOS builds use ad-hoc signing until Developer ID notarization is configured. Windows builds publish MSI only until a code-signing certificate is configured.
           releaseDraft: true
           prerelease: ${{ needs.prepare-release.outputs.prerelease }}
           releaseAssetNamePattern: RomDeck_[version]_[platform]_[arch][setup][ext]
           args: ${{ matrix.args }}
+
+  release-checksums:
+    name: Publish SHA256 Checksums
+    needs:
+      - prepare-release
+      - release-tauri
+    if: needs.prepare-release.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Generate And Upload Checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          rm -rf release-assets
+          mkdir -p release-assets
+          gh release download "$TAG" --dir release-assets --clobber
+          rm -f release-assets/SHA256SUMS.txt
+          (
+            cd release-assets
+            find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+          gh release upload "$TAG" release-assets/SHA256SUMS.txt --clobber

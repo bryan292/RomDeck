@@ -63,6 +63,19 @@ minimal runtime `node_modules`, then starts the host with the local Node runtime
 installed on the machine. A future production package should replace that with a
 self-contained sidecar binary or native Tauri commands.
 
+### Release Trust
+
+Current release artifacts are development builds. macOS bundles use ad-hoc code
+signing so Apple Silicon systems can validate the app bundle, but they are not
+Developer ID notarized yet. Windows releases publish MSI installers only until a
+Windows code-signing certificate is configured.
+
+Production-grade distribution still requires:
+
+- Apple Developer ID Application certificate plus notarization secrets.
+- Windows code-signing certificate or Trusted Signing setup.
+- SHA256 verification from the release `SHA256SUMS.txt` asset.
+
 ## GitHub Automation
 
 GitHub Actions workflows are included for:
@@ -78,7 +91,7 @@ Release flow:
 2. Review and merge the generated version pull request in GitHub.
 3. Wait for CI on `main` to pass.
 4. The `Release` workflow creates the matching tag, builds desktop packages, and
-   attaches installers to a draft release.
+   attaches installers and `SHA256SUMS.txt` to a draft release.
 5. Review and publish the generated draft release.
 
 ## JavaScript Libraries

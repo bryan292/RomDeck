@@ -19,14 +19,14 @@ jobs:
         include:
           - label: macOS Apple Silicon
             platform: macos-latest
-            args: --target aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg
             rust-targets: aarch64-apple-darwin
             artifact: macos-aarch64
             node-platform: darwin
             node-arch: arm64
           - label: macOS Intel
             platform: macos-latest
-            args: --target x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg
             rust-targets: x86_64-apple-darwin
             artifact: macos-x64
             node-platform: darwin
@@ -40,7 +40,7 @@ jobs:
             node-arch: x64
           - label: Windows x64
             platform: windows-latest
-            args: ""
+            args: --bundles msi
             rust-targets: ""
             artifact: windows-x64
             node-platform: win
@@ -97,7 +97,4 @@ jobs:
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.deb
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.rpm
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.msi
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.exe
-            packages/desktop-tauri/src-tauri/target/**/release/romdeck
-            packages/desktop-tauri/src-tauri/target/**/release/romdeck.exe
           if-no-files-found: error
