@@ -9,11 +9,13 @@ on:
         type: string
 
 permissions:
-  contents: read
+  actions: write
+  contents: write
+  pull-requests: write
 
 jobs:
   prepare-version:
-    name: Prepare Version Patch
+    name: Prepare Version Pull Request
     runs-on: ubuntu-24.04
 
     steps:
@@ -42,14 +44,23 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Create Version Patch
-        run: |
-          git diff --binary > "romdeck-v${{ inputs.version }}.patch"
-          git status --short
-
-      - name: Upload Version Patch
-        uses: actions/upload-artifact@v4
+      - name: Create Version Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
         with:
-          name: romdeck-v${{ inputs.version }}-version-patch
-          path: romdeck-v${{ inputs.version }}.patch
-          if-no-files-found: error
+          branch: version/v${{ inputs.version }}
+          delete-branch: true
+          title: Prepare RomDeck v${{ inputs.version }}
+          commit-message: Prepare RomDeck v${{ inputs.version }}
+          body: |
+            Prepares version files for RomDeck v${{ inputs.version }}.
+
+            Merge this PR after CI passes. Once the version commit lands on `main`, the release workflow will create tag `v${{ inputs.version }}`, build desktop packages, and attach installers to a draft GitHub Release.
+          labels: release
+
+      - name: Trigger CI For Version Pull Request
+        if: steps.cpr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}
+        run: gh workflow run ci.yml --ref "$VERSION_BRANCH"

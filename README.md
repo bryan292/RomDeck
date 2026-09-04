@@ -69,15 +69,16 @@ GitHub Actions workflows are included for:
 
 - CI on pull requests and pushes to `main`/`develop`.
 - Manual package builds for macOS, Linux, and Windows artifacts.
-- Manual version patch preparation.
-- Draft GitHub Releases when pushing tags like `v0.1.0`.
+- Manual version preparation through a GitHub pull request.
+- Automatic draft GitHub Releases after a version PR is merged and CI passes.
 
 Release flow:
 
 1. Run the `Prepare Version` workflow with the next semver.
-2. Download and apply the generated version patch locally.
-3. Commit the version change to `main`.
-4. Create and push a matching tag, for example `v0.2.0`.
+2. Review and merge the generated version pull request in GitHub.
+3. Wait for CI on `main` to pass.
+4. The `Release` workflow creates the matching tag, builds desktop packages, and
+   attaches installers to a draft release.
 5. Review and publish the generated draft release.
 
 ## JavaScript Libraries
