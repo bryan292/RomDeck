@@ -79,6 +79,17 @@ jobs:
             exit 0
           fi
 
+          tag_commit=""
+          if [ "$tag_exists" = true ]; then
+            git fetch --force --tags origin "refs/tags/$tag:refs/tags/$tag"
+            tag_commit="$(git rev-list -n 1 "$tag")"
+          fi
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$REQUESTED_TAG" ] && [ "$tag_exists" = true ] && [ "$tag_commit" != "$commit" ]; then
+            echo "::error::Tag $tag already exists at $tag_commit, but package.json on this run resolves to $commit. Bump package.json to a new version, or delete/recreate the failed draft tag before rerunning."
+            exit 1
+          fi
+
           if [ "$tag_exists" = false ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
