@@ -189,6 +189,9 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
           });
           continue;
         }
+        if (existingFileExistsSync(targetPath)) {
+          throw new Error(`Target file already exists with different size: ${file.targetName}`);
+        }
         skippedAll = false;
         await runTransferWithRetries(job, controller.signal, () => downloadFile(file.sourceUrl, targetPath, file.size, job, controller.signal));
       }

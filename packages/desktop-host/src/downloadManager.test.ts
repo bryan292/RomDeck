@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from "node:http";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zipSync } from "fflate";
@@ -59,6 +59,46 @@ describe("downloadManager", () => {
     expect(await readFile(join(destination, "Metroid Fusion.gba"))).toEqual(Buffer.from([1, 2, 3]));
     await expect(stat(join(destination, "Metroid Fusion.zip"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(join(destination, "cover.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps ZIP extraction targets inside the destination", async () => {
+    const zip = zipSync({
+      "../Escaped Test.gba": new Uint8Array([8, 9])
+    });
+    const server = await serveBuffer(zip);
+    const parent = await mkdtemp(join(tmpdir(), "romdeck-zip-traversal-parent-"));
+    const destination = join(parent, "roms");
+    await mkdir(destination);
+
+    const job = await enqueueDownload({
+      id: "test|gba|zip-traversal",
+      source: "internet-archive",
+      itemId: "test",
+      title: "Escaped Test",
+      systemKey: "gba",
+      format: "Archive",
+      files: [
+        {
+          sourceUrl: server.url,
+          sourceName: "Escaped Test.zip",
+          targetName: "Escaped Test.zip",
+          size: zip.byteLength
+        }
+      ],
+      extractedFiles: [{ name: "../Escaped Test.gba", size: 2 }],
+      fileCount: 1,
+      totalSize: 2,
+      requiresExtraction: true,
+      canDownload: true,
+      warnings: [],
+      confidence: 0.9,
+      reason: "ZIP contains a compatible file"
+    }, pathToFileUri(destination));
+    const completed = await waitForJob(job.id);
+
+    expect(completed.status).toBe("complete");
+    expect(await readFile(join(destination, "Escaped Test.gba"))).toEqual(Buffer.from([8, 9]));
+    await expect(stat(join(parent, "Escaped Test.gba"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("cancels an active direct download and removes the partial file", async () => {
@@ -134,6 +174,24 @@ describe("downloadManager", () => {
     expect(await readFile(join(destination, "Retry Test.gba"))).toEqual(Buffer.from([4, 5, 6]));
   });
 
+  it("fails instead of overwriting an existing direct file with a different size", async () => {
+    const server = await serveBuffer(new Uint8Array([4, 5, 6]));
+    const destination = await mkdtemp(join(tmpdir(), "romdeck-overwrite-test-roms-"));
+    await writeFile(join(destination, "Overwrite Test.gba"), Buffer.from([1]));
+
+    const job = await enqueueDownload(testDirectCandidate({
+      title: "Overwrite Test",
+      targetName: "Overwrite Test.gba",
+      sourceUrl: server.url,
+      size: 3
+    }), pathToFileUri(destination));
+    const completed = await waitForJob(job.id);
+
+    expect(completed.status).toBe("failed");
+    expect(completed.error).toContain("already exists with different size");
+    expect(await readFile(join(destination, "Overwrite Test.gba"))).toEqual(Buffer.from([1]));
+  });
+
   it("returns an existing active job for duplicate download requests", async () => {
     const server = await serveSlowBuffer(new Uint8Array(128 * 1024).fill(3));
     const destination = await mkdtemp(join(tmpdir(), "romdeck-duplicate-test-roms-"));
@@ -183,7 +241,7 @@ describe("downloadManager", () => {
   });
 });
 
-function testDirectCandidate(options: { title: string; targetName: string; sourceUrl: string }): DownloadCandidate {
+function testDirectCandidate(options: { title: string; targetName: string; sourceUrl: string; size?: number }): DownloadCandidate {
   return {
     id: `test|gba|${options.targetName}`,
     source: "internet-archive",
@@ -196,11 +254,11 @@ function testDirectCandidate(options: { title: string; targetName: string; sourc
         sourceUrl: options.sourceUrl,
         sourceName: options.targetName,
         targetName: options.targetName,
-        size: 1
+        size: options.size ?? 1
       }
     ],
     fileCount: 1,
-    totalSize: 1,
+    totalSize: options.size ?? 1,
     requiresExtraction: false,
     canDownload: true,
     warnings: [],
