@@ -42,12 +42,30 @@ async function enrichArchiveCandidate(candidate: DownloadCandidate): Promise<Dow
 
   if (archiveExtension !== ".zip") {
     const label = archiveExtension ? archiveExtension.toUpperCase().slice(1) : "Archive";
-    if (
-      [".7z", ".rar"].includes(archiveExtension) &&
-      canUseJsWasmArchive(candidate.files[0].size) &&
-      candidate.files[0].size !== undefined &&
-      candidate.files[0].size <= MAX_BUFFERED_ARCHIVE_INSPECT_BYTES
-    ) {
+    if (![".7z", ".rar"].includes(archiveExtension)) {
+      const inspectionReason = `${label} extraction uses JS/WASM and is currently limited to ${jsWasmArchiveLimitLabel()}.`;
+      return [{
+        ...candidate,
+        canDownload: false,
+        warnings: [inspectionReason],
+        reason: inspectionReason
+      }];
+    }
+
+    const archiveSize = candidate.files[0].size;
+    if (!canUseJsWasmArchive(archiveSize)) {
+      const inspectionReason = archiveSize === undefined
+        ? `${label} size is unknown; JS/WASM extraction is limited to ${jsWasmArchiveLimitLabel()}.`
+        : `${label} exceeds JS/WASM extraction limit of ${jsWasmArchiveLimitLabel()}.`;
+      return [{
+        ...candidate,
+        canDownload: false,
+        warnings: [inspectionReason],
+        reason: inspectionReason
+      }];
+    }
+
+    if (archiveSize !== undefined && archiveSize <= MAX_BUFFERED_ARCHIVE_INSPECT_BYTES) {
       const inspected = await inspectBufferedArchive(candidate.files[0].sourceUrl, candidate.systemKey);
       if (inspected.length > 0) {
         return [{
@@ -66,12 +84,10 @@ async function enrichArchiveCandidate(candidate: DownloadCandidate): Promise<Dow
       }
     }
 
-    const inspectionReason = [".7z", ".rar"].includes(archiveExtension)
-      ? `${label} is not inspected before download because large JS/WASM archive inspection is slow.`
-      : `${label} extraction uses JS/WASM and is currently limited to ${jsWasmArchiveLimitLabel()}.`;
+    const inspectionReason = `${label} is not inspected before download because large JS/WASM archive inspection is slow.`;
     return [{
       ...candidate,
-      canDownload: [".7z", ".rar"].includes(archiveExtension) && canUseJsWasmArchive(candidate.files[0].size),
+      canDownload: true,
       warnings: [inspectionReason],
       reason: inspectionReason
     }];
