@@ -45,5 +45,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Core Platform Check
+        run: npm run check:core-platform
+
       - name: E2E Smoke
         run: npm run test:e2e

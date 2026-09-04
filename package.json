@@ -12,6 +12,7 @@
     "build": "npm run build -w @romdeck/core && npm run build -w @romdeck/web-ui && npm run build -w @romdeck/desktop-host",
     "prepare:tauri-host": "node scripts/prepare-tauri-host.mjs",
     "smoke:tauri-host": "node scripts/smoke-tauri-host.mjs",
+    "check:core-platform": "node scripts/check-core-platform-neutral.mjs",
     "build:tauri": "npm run build -w @romdeck/desktop-tauri",
     "test:e2e": "playwright test",
     "test": "npm run build -w @romdeck/core && npm run test -w @romdeck/core && npm run test -w @romdeck/desktop-host",
