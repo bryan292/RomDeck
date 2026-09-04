@@ -5,6 +5,7 @@ import { rankSearchResult } from "./searchRanking.js";
 import { SYSTEMS, isSystemKey } from "./systems.js";
 import { installedState } from "./matching.js";
 import { esdeDirectoryNamesForSystem } from "./esde.js";
+import { filterInstalledGames, summarizeInstalledSystems } from "./library.js";
 
 describe("resolveItemFiles", () => {
   it("returns only direct GBA files and rejects auxiliary files", () => {
@@ -421,5 +422,36 @@ describe("scanInstalledGames", () => {
 
     expect(installed).toHaveLength(1);
     expect(installed[0].title).toBe("Sonic Adventure");
+  });
+});
+
+describe("library helpers", () => {
+  const installed = [
+    ...scanInstalledGames("gba", [
+      { name: "Metroid Fusion (USA).gba", relativePath: "Action/Metroid Fusion (USA).gba" },
+      { name: "Castlevania Aria of Sorrow (Europe).gba" }
+    ]),
+    ...scanInstalledGames("n64", [
+      { name: "The Legend of Zelda - Ocarina of Time (USA).z64" }
+    ])
+  ];
+
+  it("filters installed games by selected system", () => {
+    expect(filterInstalledGames(installed, { systemKey: "gba" }).map((game) => game.title)).toEqual([
+      "Castlevania Aria of Sorrow (Europe)",
+      "Metroid Fusion (USA)"
+    ]);
+  });
+
+  it("searches installed games across titles, regions, and paths", () => {
+    expect(filterInstalledGames(installed, { systemKey: "all", query: "action metroid usa" })).toHaveLength(1);
+    expect(filterInstalledGames(installed, { query: "europe" })[0].title).toBe("Castlevania Aria of Sorrow (Europe)");
+  });
+
+  it("summarizes installed games by system", () => {
+    expect(summarizeInstalledSystems(installed)).toEqual([
+      { systemKey: "gba", count: 2 },
+      { systemKey: "n64", count: 1 }
+    ]);
   });
 });

@@ -72,7 +72,7 @@ export async function initializeDownloadHistory(): Promise<void> {
 
 export async function listDownloadJobs(): Promise<RuntimeDownloadJob[]> {
   await initializeDownloadHistory();
-  return [...jobs.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function enqueueDownload(candidate: DownloadCandidate, destinationUri: string): Promise<RuntimeDownloadJob> {
@@ -81,6 +81,15 @@ export async function enqueueDownload(candidate: DownloadCandidate, destinationU
     throw new Error(candidate.warnings[0] ?? "Candidate is not downloadable.");
   }
   const planned = planDownloadJob({ candidate, destinationUri, id: randomUUID() });
+  const existing = findEquivalentActiveJob(planned);
+  if (existing) {
+    logInfo("Download already queued", {
+      jobId: existing.id,
+      systemKey: existing.systemKey,
+      title: existing.title
+    });
+    return existing;
+  }
   const now = new Date().toISOString();
   const job: RuntimeDownloadJob = {
     ...planned,
@@ -155,6 +164,14 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
       job.currentFile = file.targetName;
       touch(job);
       const targetPath = resolveInsideDestination(job.destinationUri, file.targetName);
+      logInfo("Download file started", {
+        jobId: job.id,
+        systemKey: job.systemKey,
+        title: job.title,
+        targetName: file.targetName,
+        sourceName: file.sourceName,
+        size: file.size
+      });
 
       const extension = extensionOf(file.targetName);
       if (job.requiresExtraction && extension === ".zip") {
@@ -165,6 +182,11 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
         await runTransferWithRetries(job, controller.signal, () => downloadAndExtractJsWasmArchive(file.sourceUrl, file.size, job, controller.signal));
       } else {
         if (await existingFileMatches(targetPath, file.size)) {
+          logInfo("Download file skipped", {
+            jobId: job.id,
+            targetName: file.targetName,
+            reason: "matching file already exists"
+          });
           continue;
         }
         skippedAll = false;
@@ -198,6 +220,7 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
     logError("Download failed", error, {
       jobId: job.id,
       status: job.status,
+      currentFile: job.currentFile,
       downloadedBytes: job.downloadedBytes,
       extractedBytes: job.extractedBytes
     });
@@ -387,7 +410,14 @@ async function runTransferWithRetries(job: RuntimeDownloadJob, signal: AbortSign
       job.error = `Retrying transfer after ${formatError(error)}.`;
       touch(job);
       await persistJobs();
-      logWarn("Download transfer retrying", { jobId: job.id, attempt, error: formatError(error) });
+      logWarn("Download transfer retrying", {
+        jobId: job.id,
+        currentFile: job.currentFile,
+        failedAttempt: attempt,
+        nextAttempt: attempt + 1,
+        maxAttempts: MAX_TRANSFER_ATTEMPTS,
+        error: formatError(error)
+      });
       await delay(attempt * 750, signal);
     }
   }
@@ -407,6 +437,19 @@ async function persistJobs(): Promise<void> {
 
 function isTerminalStatus(status: RuntimeDownloadJob["status"]): boolean {
   return ["complete", "failed", "skipped", "canceled"].includes(status);
+}
+
+function findEquivalentActiveJob(planned: PlannedDownloadJob): RuntimeDownloadJob | undefined {
+  return [...jobs.values()].find((job) => (
+    !isTerminalStatus(job.status) &&
+    job.systemKey === planned.systemKey &&
+    job.destinationUri === planned.destinationUri &&
+    job.files.length === planned.files.length &&
+    job.files.every((file, index) => {
+      const plannedFile = planned.files[index];
+      return file.sourceUrl === plannedFile.sourceUrl && file.targetName === plannedFile.targetName;
+    })
+  ));
 }
 
 function existingFileMatchesSync(path: string, size?: number): boolean {

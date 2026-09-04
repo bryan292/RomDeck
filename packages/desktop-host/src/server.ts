@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { arch, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,7 +11,7 @@ import {
   type AppConfig,
   type DownloadCandidate
 } from "@romdeck/core";
-import { loadConfig, saveConfig } from "./config.js";
+import { appDataDirectory, loadConfig, saveConfig } from "./config.js";
 import { cancelDownload, clearDownloadHistory, enqueueDownload, initializeDownloadHistory, listDownloadJobs, onDownloadComplete } from "./downloadManager.js";
 import { fileUriToPath, listDirectoryFiles, pathToFileUri, validateWritableDirectory } from "./files.js";
 import { fetchInternetArchiveFiles, searchInternetArchive } from "./internetArchive.js";
@@ -37,7 +38,7 @@ export function createRomDeckServer() {
   try {
     response.setHeader("access-control-allow-origin", "*");
     response.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
-    response.setHeader("access-control-allow-headers", "content-type");
+    response.setHeader("access-control-allow-headers", "content-type,x-romdeck-session");
 
     if (request.method === "OPTIONS") {
       response.writeHead(204);
@@ -56,8 +57,27 @@ export function createRomDeckServer() {
       return;
     }
 
+    if (url.pathname.startsWith("/api/") && !isAuthorizedApiRequest(request.headers["x-romdeck-session"])) {
+      sendError(response, 401, "RomDeck session token is required.");
+      return;
+    }
+
     if (url.pathname === "/api/systems" && request.method === "GET") {
       sendJson(response, 200, { systems: SYSTEM_LIST });
+      return;
+    }
+
+    if (url.pathname === "/api/diagnostics" && request.method === "GET") {
+      sendJson(response, 200, {
+        diagnostics: {
+          host: "desktop-node",
+          platform: platform(),
+          arch: arch(),
+          node: process.version,
+          appDataDirectory: appDataDirectory(),
+          sessionProtected: Boolean(process.env.ROMDECK_SESSION_TOKEN)
+        }
+      });
       return;
     }
 
@@ -214,6 +234,15 @@ export function createRomDeckServer() {
     }
   }
   });
+}
+
+function isAuthorizedApiRequest(header: string | string[] | undefined): boolean {
+  const expected = process.env.ROMDECK_SESSION_TOKEN;
+  if (!expected) {
+    return true;
+  }
+  const actual = Array.isArray(header) ? header[0] : header;
+  return actual === expected;
 }
 
 export async function startRomDeckServer(port = PORT) {

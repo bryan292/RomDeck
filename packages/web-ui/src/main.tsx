@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition } from "@romdeck/core";
+import { filterInstalledGames, summarizeInstalledSystems } from "@romdeck/core";
+import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition, SystemKey } from "@romdeck/core";
 import {
   canUseNativeDialogs,
   cancelDownload,
   clearDownloadHistory,
   getConfig,
+  getDiagnostics,
   getDownloads,
   getEsdeSuggestions,
   getLibrary,
@@ -20,7 +22,8 @@ import {
   uriToPath,
   validateFolder,
   type DownloadJob,
-  type EsdeFolderSuggestion
+  type EsdeFolderSuggestion,
+  type HostDiagnostics
 } from "./api";
 import "./styles.css";
 
@@ -33,9 +36,13 @@ function App() {
   const [config, setConfig] = useState<AppConfig>({ version: 1, systems: {} });
   const [installed, setInstalled] = useState<InstalledGame[]>([]);
   const [downloads, setDownloads] = useState<DownloadJob[]>([]);
+  const [diagnostics, setDiagnostics] = useState<HostDiagnostics | null>(null);
   const [esdeSuggestions, setEsdeSuggestions] = useState<EsdeFolderSuggestion[]>([]);
   const [completedDownloadIds, setCompletedDownloadIds] = useState<Set<string>>(new Set());
-  const [selectedSystem, setSelectedSystem] = useState("gba");
+  const [selectedSystem, setSelectedSystem] = useState<SystemKey>("gba");
+  const [systemQuery, setSystemQuery] = useState("");
+  const [installedScope, setInstalledScope] = useState<"selected" | "all">("selected");
+  const [installedQuery, setInstalledQuery] = useState("");
   const [folderPath, setFolderPath] = useState("");
   const [destinationPath, setDestinationPath] = useState("");
   const [query, setQuery] = useState("Metroid Fusion");
@@ -76,6 +83,17 @@ function App() {
     () => systems.filter((system) => config.systems[system.key]?.destinationUri).length,
     [config.systems, systems]
   );
+  const visibleSystems = useMemo(() => {
+    const cleanQuery = systemQuery.trim().toLowerCase();
+    if (!cleanQuery) {
+      return systems;
+    }
+    return systems.filter((system) => (
+      system.displayName.toLowerCase().includes(cleanQuery) ||
+      system.key.toLowerCase().includes(cleanQuery) ||
+      system.preferredExtensions.some((extension) => extension.includes(cleanQuery))
+    ));
+  }, [systemQuery, systems]);
   const activeDownloadCount = useMemo(
     () => downloads.filter((job) => !isTerminalDownload(job)).length,
     [downloads]
@@ -87,6 +105,14 @@ function App() {
     }
     return counts;
   }, [installed]);
+  const installedSummary = useMemo(() => summarizeInstalledSystems(installed), [installed]);
+  const visibleInstalled = useMemo(
+    () => filterInstalledGames(installed, {
+      systemKey: installedScope === "selected" ? selectedSystem : "all",
+      query: installedQuery
+    }),
+    [installed, installedQuery, installedScope, selectedSystem]
+  );
 
   useEffect(() => {
     void initialize();
@@ -106,6 +132,9 @@ function App() {
 
   useEffect(() => {
     selectedSystemRef.current = selectedSystem;
+    setResults([]);
+    setSelectedResult(null);
+    setCandidates([]);
   }, [selectedSystem]);
 
   useEffect(() => {
@@ -127,6 +156,7 @@ function App() {
       setInstalled(libraryResponse.installed);
       setDownloads(downloadResponse.jobs);
       setNotice("Ready", "ready");
+      void refreshDiagnostics();
     } catch (error) {
       setNotice(messageFromError(error), "error");
     } finally {
@@ -154,6 +184,15 @@ function App() {
       }
     } catch {
       // The status bar is reserved for user-triggered actions.
+    }
+  }
+
+  async function refreshDiagnostics() {
+    try {
+      const response = await getDiagnostics();
+      setDiagnostics(response.diagnostics);
+    } catch {
+      setDiagnostics(null);
     }
   }
 
@@ -452,8 +491,15 @@ function App() {
             <h2>Systems</h2>
             <span>{configuredSystemCount}/{systems.length}</span>
           </div>
+          <input
+            className="system-filter"
+            value={systemQuery}
+            onChange={(event) => setSystemQuery(event.target.value)}
+            placeholder="Filter systems"
+          />
           <div className="system-list">
-            {systems.map((system) => (
+            {visibleSystems.length === 0 ? <div className="empty-state">No systems match this filter.</div> : null}
+            {visibleSystems.map((system) => (
               <button
                 key={system.key}
                 type="button"
@@ -486,7 +532,12 @@ function App() {
           <section className="command-bar">
             <div className="selected-system">
               <small>Selected system</small>
-              <strong>{selectedSystemInfo?.displayName ?? selectedSystem}</strong>
+              <div className="selected-system-title">
+                <strong>{selectedSystemInfo?.displayName ?? selectedSystem}</strong>
+                <StatusBadge tone={selectedSystemConfig?.destinationUri ? "good" : "amber"}>
+                  {selectedSystemConfig?.destinationUri ? "Ready" : "Setup"}
+                </StatusBadge>
+              </div>
               <div className="extension-row">
                 {selectedSystemInfo?.preferredExtensions.map((extension) => (
                   <span key={extension}>{extension}</span>
@@ -553,8 +604,8 @@ function App() {
                     <div>
                       <div className="candidate-title-row">
                         <strong>{candidate.title}</strong>
-                        <StatusBadge tone={candidate.canDownload ? "good" : "danger"}>
-                          {candidate.canDownload ? "Downloadable" : "Blocked"}
+                        <StatusBadge tone={candidateStatusTone(candidate, config)}>
+                          {candidateStatusLabel(candidate, config)}
                         </StatusBadge>
                       </div>
                       <div className="candidate-meta">
@@ -574,14 +625,14 @@ function App() {
                       ) : null}
                       {candidate.warnings.length > 0 ? <small>{candidate.warnings.join(" ")}</small> : null}
                     </div>
-                    {!selectedSystemConfig?.destinationUri || !candidate.canDownload ? (
-                      <small className="candidate-warning">{downloadDisabledReason(candidate, Boolean(selectedSystemConfig?.destinationUri))}</small>
+                    {!hasCandidateDestination(candidate, config) || !candidate.canDownload ? (
+                      <small className="candidate-warning">{downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}</small>
                     ) : null}
                     <button
                       type="button"
                       onClick={() => void download(candidate)}
-                      disabled={busy || !selectedSystemConfig?.destinationUri || !candidate.canDownload}
-                      title={downloadDisabledReason(candidate, Boolean(selectedSystemConfig?.destinationUri))}
+                      disabled={busy || !hasCandidateDestination(candidate, config) || !candidate.canDownload}
+                      title={downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}
                     >
                       {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
                     </button>
@@ -599,6 +650,23 @@ function App() {
                   </StatusBadge>
                 </div>
                 <p className="path-readout">{destinationPath || selectedSystemConfig?.destinationUri || "No destination configured"}</p>
+                {!selectedSystemConfig?.destinationUri ? (
+                  <div className="setup-callout">
+                    <strong>{selectedSystemInfo?.displayName ?? selectedSystem} folder required</strong>
+                    <small>
+                      {selectedEsdeSuggestions.some((suggestion) => suggestion.confidence === "exact")
+                        ? "Exact ES-DE folder available."
+                        : "Downloads unlock after this folder is saved."}
+                    </small>
+                  </div>
+                ) : null}
+                {diagnostics ? (
+                  <div className="diagnostics-strip" aria-label="Host diagnostics">
+                    <span>{diagnostics.platform} {diagnostics.arch}</span>
+                    <span>{diagnostics.node}</span>
+                    <span>{diagnostics.sessionProtected ? "Protected" : "Dev open"}</span>
+                  </div>
+                ) : null}
                 <div className="folder-form">
                   <input
                     value={folderPath}
@@ -661,27 +729,53 @@ function App() {
               <section className="panel installed-panel">
                 <div className="panel-heading">
                   <h2>Installed</h2>
-                  <StatusBadge tone="blue">{installed.length}</StatusBadge>
+                  <StatusBadge tone="blue">{visibleInstalled.length}/{installed.length}</StatusBadge>
                 </div>
+                <div className="installed-tools">
+                  <div className="segmented-control" aria-label="Installed library scope">
+                    <button
+                      type="button"
+                      className={installedScope === "selected" ? "active" : ""}
+                      onClick={() => setInstalledScope("selected")}
+                    >
+                      Selected
+                    </button>
+                    <button
+                      type="button"
+                      className={installedScope === "all" ? "active" : ""}
+                      onClick={() => setInstalledScope("all")}
+                    >
+                      All
+                    </button>
+                  </div>
+                  <input
+                    value={installedQuery}
+                    onChange={(event) => setInstalledQuery(event.target.value)}
+                    placeholder="Filter installed"
+                  />
+                </div>
+                {installedSummary.length > 0 ? (
+                  <div className="installed-summary-strip" aria-label="Installed count by system">
+                    {installedSummary.slice(0, 6).map((summary) => (
+                      <span key={summary.systemKey}>
+                        <strong>{summary.systemKey.toUpperCase()}</strong>
+                        <small>{summary.count}</small>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="compact-list">
                   {installed.length === 0 ? <div className="empty-state">No installed games scanned.</div> : null}
-                  {installed.slice(0, 8).map((game) => (
+                  {installed.length > 0 && visibleInstalled.length === 0 ? <div className="empty-state">No installed games match this filter.</div> : null}
+                  {visibleInstalled.map((game) => (
                     <div key={`${game.systemKey}:${game.title}`} className="installed-row">
                       <span>
                         <strong>{game.title}</strong>
-                        <small>{game.region ?? "Region unknown"}</small>
+                        <small>{installedGameDetail(game)}</small>
                       </span>
                       <StatusBadge tone="blue">{game.systemKey.toUpperCase()}</StatusBadge>
                     </div>
                   ))}
-                  {installed.length > 8 ? (
-                    <div className="installed-row installed-summary">
-                      <span>
-                        <strong>{installed.length - 8} more installed</strong>
-                        <small>Use scan/search to refresh matches.</small>
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
               </section>
             </aside>
@@ -725,7 +819,7 @@ function DownloadRow({ job, onCancel }: { job: DownloadJob; onCancel: (jobId: st
           <strong>{job.title}</strong>
           <small>{downloadSummary(job)}</small>
         </span>
-        <StatusBadge tone={toneForDownload(job.status)}>{job.status}</StatusBadge>
+        <StatusBadge tone={toneForDownload(job.status)}>{labelForDownloadStatus(job.status)}</StatusBadge>
       </div>
       <div
         className="progress-track"
@@ -798,6 +892,15 @@ function formatBytes(value: number | undefined): string {
   return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
 }
 
+function installedGameDetail(game: InstalledGame): string {
+  const parts = [game.region ?? "Region unknown"];
+  if (game.version) {
+    parts.push(game.version);
+  }
+  parts.push(`${game.files.length} file${game.files.length === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
 function downloadSummary(job: DownloadJob): string {
   const parts: string[] = [];
   if (job.bytesTotal) {
@@ -835,6 +938,49 @@ function downloadDetail(job: DownloadJob): string {
     return `Extracted ${formatBytes(job.extractedBytes)}`;
   }
   return job.currentFile ?? "Waiting";
+}
+
+function labelForDownloadStatus(status: DownloadJob["status"]): string {
+  switch (status) {
+    case "queued":
+      return "Queued";
+    case "downloading":
+      return "Downloading";
+    case "extracting":
+      return "Extracting";
+    case "complete":
+      return "Complete";
+    case "skipped":
+      return "Skipped";
+    case "failed":
+      return "Failed";
+    case "canceled":
+      return "Canceled";
+  }
+}
+
+function hasCandidateDestination(candidate: DownloadCandidate, config: AppConfig): boolean {
+  return Boolean(config.systems[candidate.systemKey]?.enabled && config.systems[candidate.systemKey]?.destinationUri);
+}
+
+function candidateStatusLabel(candidate: DownloadCandidate, config: AppConfig): string {
+  if (!candidate.canDownload) {
+    return "Blocked";
+  }
+  if (!hasCandidateDestination(candidate, config)) {
+    return "Needs setup";
+  }
+  return "Ready";
+}
+
+function candidateStatusTone(candidate: DownloadCandidate, config: AppConfig): "good" | "muted" | "blue" | "amber" | "danger" {
+  if (!candidate.canDownload) {
+    return "danger";
+  }
+  if (!hasCandidateDestination(candidate, config)) {
+    return "amber";
+  }
+  return "good";
 }
 
 function downloadDisabledReason(candidate: DownloadCandidate, hasDestination: boolean): string {

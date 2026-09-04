@@ -21,6 +21,7 @@ beforeAll(async () => {
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  delete process.env.ROMDECK_SESSION_TOKEN;
   await Promise.all(servers.map((server) => closeServer(server)));
   servers.length = 0;
 });
@@ -35,6 +36,47 @@ describe("desktop host HTTP API", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.path).toBe(nativePath);
+  });
+
+  it("requires the desktop session token when one is configured", async () => {
+    process.env.ROMDECK_SESSION_TOKEN = "test-token";
+    const server = await listen();
+
+    const unauthorized = await getJson<{ error: string }>(server, "/api/systems");
+    const authorized = await getJson<{ systems: unknown[] }>(server, "/api/systems", {
+      "x-romdeck-session": "test-token"
+    });
+
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.body.error).toContain("session token");
+    expect(authorized.status).toBe(200);
+    expect(authorized.body.systems.length).toBeGreaterThan(0);
+  });
+
+  it("leaves health checks available without a session token", async () => {
+    process.env.ROMDECK_SESSION_TOKEN = "test-token";
+    const server = await listen();
+
+    const response = await getJson<{ ok: true }>(server, "/api/health");
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+  });
+
+  it("reports protected host diagnostics", async () => {
+    process.env.ROMDECK_SESSION_TOKEN = "test-token";
+    const server = await listen();
+
+    const response = await getJson<{ diagnostics: { host: string; sessionProtected: boolean; appDataDirectory: string } }>(
+      server,
+      "/api/diagnostics",
+      { "x-romdeck-session": "test-token" }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.diagnostics.host).toBe("desktop-node");
+    expect(response.body.diagnostics.sessionProtected).toBe(true);
+    expect(response.body.diagnostics.appDataDirectory).toBe(configDir);
   });
 
   it("rejects downloads with unavailable destinations before provider fetch", async () => {
@@ -67,6 +109,18 @@ async function listen(): Promise<Server> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push(server);
   return server;
+}
+
+async function getJson<T>(server: Server, path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: T }> {
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Test server did not bind to a TCP port.");
+  }
+  const response = await nativeFetch(`http://127.0.0.1:${address.port}${path}`, { headers });
+  return {
+    status: response.status,
+    body: await response.json() as T
+  };
 }
 
 async function postJson<T>(server: Server, path: string, body: unknown): Promise<{ status: number; body: T }> {

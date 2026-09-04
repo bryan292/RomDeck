@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(windows)]
@@ -14,6 +15,9 @@ use std::os::windows::process::CommandExt;
 struct DesktopHostProcess {
     child: Mutex<Option<Child>>,
 }
+
+#[cfg(not(mobile))]
+struct SessionToken(String);
 
 #[cfg(not(mobile))]
 impl DesktopHostProcess {
@@ -47,6 +51,7 @@ pub fn run() {
     #[cfg(not(mobile))]
     let builder = builder
         .manage(DesktopHostProcess::default())
+        .manage(SessionToken(generate_session_token()))
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 use tauri::Manager;
@@ -56,6 +61,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![romdeck_session_token])
         .setup(|app| {
             #[cfg(not(mobile))]
             start_desktop_host(app);
@@ -76,6 +82,18 @@ pub fn run() {
 }
 
 #[cfg(not(mobile))]
+#[tauri::command]
+fn romdeck_session_token(token: tauri::State<SessionToken>) -> String {
+    token.0.clone()
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn romdeck_session_token() -> String {
+    String::new()
+}
+
+#[cfg(not(mobile))]
 fn start_desktop_host(app: &mut tauri::App) {
     use tauri::{path::BaseDirectory, Manager};
 
@@ -91,9 +109,11 @@ fn start_desktop_host(app: &mut tauri::App) {
     };
 
     let node_path = node_executable(app);
+    let session_token = app.state::<SessionToken>().0.clone();
     let mut command = Command::new(&node_path);
     command.arg("server.js")
         .env("PORT", "5137")
+        .env("ROMDECK_SESSION_TOKEN", session_token)
         .current_dir(server_dir)
         .stdin(Stdio::null());
 
@@ -167,4 +187,13 @@ fn start_desktop_host(app: &mut tauri::App) {
         }
         Some(directory.join("romdeck-host.log"))
     }
+}
+
+#[cfg(not(mobile))]
+fn generate_session_token() -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("romdeck-{}-{timestamp}", std::process::id())
 }

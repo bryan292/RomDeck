@@ -134,12 +134,80 @@ describe("downloadManager", () => {
     expect(await readFile(join(destination, "Retry Test.gba"))).toEqual(Buffer.from([4, 5, 6]));
   });
 
+  it("returns an existing active job for duplicate download requests", async () => {
+    const server = await serveSlowBuffer(new Uint8Array(128 * 1024).fill(3));
+    const destination = await mkdtemp(join(tmpdir(), "romdeck-duplicate-test-roms-"));
+    const candidate = testDirectCandidate({
+      title: "Duplicate Test",
+      targetName: "Duplicate Test.gba",
+      sourceUrl: server.url
+    });
+
+    const first = await enqueueDownload(candidate, pathToFileUri(destination));
+    const second = await enqueueDownload(candidate, pathToFileUri(destination));
+    await cancelDownload(first.id);
+    await waitForJob(first.id);
+
+    expect(second.id).toBe(first.id);
+  });
+
   it("clears terminal download history", async () => {
     const jobs = await clearDownloadHistory();
 
     expect(jobs.every((job) => !["complete", "failed", "skipped", "canceled"].includes(job.status))).toBe(true);
   });
+
+  it("lists newest download jobs first", async () => {
+    const firstServer = await serveBuffer(new Uint8Array([1]));
+    const secondServer = await serveBuffer(new Uint8Array([2]));
+    const destination = await mkdtemp(join(tmpdir(), "romdeck-order-test-roms-"));
+
+    const first = await enqueueDownload(testDirectCandidate({
+      title: "First Order Test",
+      targetName: "First Order Test.gba",
+      sourceUrl: firstServer.url
+    }), pathToFileUri(destination));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = await enqueueDownload(testDirectCandidate({
+      title: "Second Order Test",
+      targetName: "Second Order Test.gba",
+      sourceUrl: secondServer.url
+    }), pathToFileUri(destination));
+
+    await waitForJob(first.id);
+    await waitForJob(second.id);
+    const jobs = await listDownloadJobs();
+
+    expect(jobs[0].id).toBe(second.id);
+    expect(jobs[1].id).toBe(first.id);
+  });
 });
+
+function testDirectCandidate(options: { title: string; targetName: string; sourceUrl: string }): DownloadCandidate {
+  return {
+    id: `test|gba|${options.targetName}`,
+    source: "internet-archive",
+    itemId: "test",
+    title: options.title,
+    systemKey: "gba",
+    format: "GBA",
+    files: [
+      {
+        sourceUrl: options.sourceUrl,
+        sourceName: options.targetName,
+        targetName: options.targetName,
+        size: 1
+      }
+    ],
+    fileCount: 1,
+    totalSize: 1,
+    requiresExtraction: false,
+    canDownload: true,
+    warnings: [],
+    confidence: 0.9,
+    reason: "direct order test file"
+  };
+}
 
 async function serveBuffer(buffer: Uint8Array): Promise<{ url: string; close: () => Promise<void> }> {
   const server = createServer((request, response) => {

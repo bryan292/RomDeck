@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@romdeck/core": "0.1.0",
+    "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.3"
   }
 }

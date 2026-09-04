@@ -1,4 +1,5 @@
 import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition, SystemKey } from "@romdeck/core";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 declare global {
@@ -10,6 +11,7 @@ declare global {
 const API_BASE = defaultApiBase();
 const REQUEST_RETRIES = API_BASE ? 30 : 0;
 const REQUEST_RETRY_DELAY_MS = 350;
+let sessionTokenPromise: Promise<string | null> | null = null;
 
 export function canUseNativeDialogs(): boolean {
   if (typeof window === "undefined") {
@@ -35,10 +37,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= REQUEST_RETRIES; attempt += 1) {
     try {
+      const sessionToken = await romdeckSessionToken();
       const response = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
           "content-type": "application/json",
+          ...(sessionToken ? { "x-romdeck-session": sessionToken } : {}),
           ...options?.headers
         }
       });
@@ -57,6 +61,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function romdeckSessionToken(): Promise<string | null> {
+  if (!API_BASE || !canUseNativeDialogs()) {
+    return Promise.resolve(null);
+  }
+  sessionTokenPromise ??= invoke<string>("romdeck_session_token").catch(() => null);
+  return sessionTokenPromise;
 }
 
 function shouldRetryRequest(error: unknown, attempt: number, method?: string): boolean {
@@ -78,6 +90,10 @@ export function getEsdeSuggestions() {
 
 export function getConfig() {
   return request<{ config: AppConfig }>("/api/config");
+}
+
+export function getDiagnostics() {
+  return request<{ diagnostics: HostDiagnostics }>("/api/diagnostics");
 }
 
 export function saveConfig(config: AppConfig) {
@@ -186,4 +202,13 @@ export interface EsdeFolderSuggestion {
   destinationUri: string;
   confidence: "exact" | "expected";
   reason: string;
+}
+
+export interface HostDiagnostics {
+  host: string;
+  platform: string;
+  arch: string;
+  node: string;
+  appDataDirectory: string;
+  sessionProtected: boolean;
 }

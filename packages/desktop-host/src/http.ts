@@ -25,7 +25,7 @@ export function sendJson(response: ServerResponse, status: number, body: unknown
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
-    "access-control-allow-headers": "content-type"
+    "access-control-allow-headers": "content-type,x-romdeck-session"
   });
   response.end(JSON.stringify(body));
 }

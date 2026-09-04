@@ -1,6 +1,7 @@
 export * from "./downloads.js";
 export * from "./esde.js";
 export * from "./filenames.js";
+export * from "./library.js";
 export * from "./matching.js";
 export * from "./ports.js";
 export * from "./resolver.js";
