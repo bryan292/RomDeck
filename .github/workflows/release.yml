@@ -201,7 +201,7 @@ jobs:
           releaseBody: |
             RomDeck desktop build.
 
-            Current MVP package note: this build bundles the web UI and JS host resources, but requires a local Node runtime to launch the backend.
+            Current MVP package note: this build bundles the web UI, JS host resources, and a Node runtime for the local backend.
           releaseDraft: true
           prerelease: ${{ needs.prepare-release.outputs.prerelease }}
           releaseAssetNamePattern: RomDeck_[version]_[platform]_[arch][setup][ext]

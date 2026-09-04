@@ -103,12 +103,12 @@ function expandArchive(archivePath, destination, platform) {
 
   if (platform === "win") {
     const command = process.platform === "win32" ? "powershell.exe" : "pwsh";
+    const literalArchivePath = archivePath.replaceAll("'", "''");
+    const literalDestination = destination.replaceAll("'", "''");
     execFileSync(command, [
       "-NoProfile",
       "-Command",
-      "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-      archivePath,
-      destination
+      `Expand-Archive -LiteralPath '${literalArchivePath}' -DestinationPath '${literalDestination}' -Force`
     ], { stdio: "inherit" });
     return;
   }
