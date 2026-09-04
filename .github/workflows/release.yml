@@ -227,17 +227,21 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
       - name: Generate And Upload Checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           rm -rf release-assets
           mkdir -p release-assets
-          gh release download "$TAG" --dir release-assets --clobber
+          gh release download "$TAG" --repo "$GH_REPO" --dir release-assets --clobber
           rm -f release-assets/SHA256SUMS.txt
           (
             cd release-assets
             find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           )
-          gh release upload "$TAG" release-assets/SHA256SUMS.txt --clobber
+          gh release upload "$TAG" release-assets/SHA256SUMS.txt --repo "$GH_REPO" --clobber
