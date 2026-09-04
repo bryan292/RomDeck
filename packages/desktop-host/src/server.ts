@@ -94,6 +94,12 @@ export function createRomDeckServer() {
 
     if (url.pathname === "/api/config" && request.method === "PUT") {
       const body = await readJson<{ config: AppConfig }>(request);
+      try {
+        await validateConfigDestinations(body.config);
+      } catch (error) {
+        sendError(response, 400, error);
+        return;
+      }
       sendJson(response, 200, { config: await saveConfig(body.config) });
       return;
     }
@@ -244,6 +250,18 @@ function isAuthorizedApiRequest(header: string | string[] | undefined): boolean 
   }
   const actual = Array.isArray(header) ? header[0] : header;
   return actual === expected;
+}
+
+async function validateConfigDestinations(config: AppConfig): Promise<void> {
+  const systems = config.systems as Record<string, { destinationUri?: unknown } | undefined>;
+  for (const [systemKey, systemConfig] of Object.entries(systems)) {
+    if (!isSystemKey(systemKey)) {
+      throw new Error(`Unsupported systemKey in config: ${systemKey}`);
+    }
+    if (typeof systemConfig?.destinationUri === "string") {
+      await validateWritableDirectory(systemConfig.destinationUri);
+    }
+  }
 }
 
 export async function startRomDeckServer(port = PORT) {

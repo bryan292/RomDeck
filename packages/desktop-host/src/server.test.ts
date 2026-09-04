@@ -105,6 +105,44 @@ describe("desktop host HTTP API", () => {
     expect(response.body.error).toContain("Configured destination is not available");
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("rejects invalid destination config server-side", async () => {
+    const server = await listen();
+    const missingPath = join(configDir, "missing-config", "gba");
+
+    const response = await putJson<{ error: string }>(server, "/api/config", {
+      config: {
+        version: 1,
+        systems: {
+          gba: {
+            enabled: true,
+            destinationUri: pathToFileUri(missingPath)
+          }
+        }
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("ENOENT");
+  });
+
+  it("rejects unsupported system keys in config", async () => {
+    const server = await listen();
+
+    const response = await putJson<{ error: string }>(server, "/api/config", {
+      config: {
+        version: 1,
+        systems: {
+          switch: {
+            enabled: true
+          }
+        }
+      }
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Unsupported systemKey");
+  });
 });
 
 async function listen(): Promise<Server> {
@@ -127,12 +165,20 @@ async function getJson<T>(server: Server, path: string, headers: Record<string, 
 }
 
 async function postJson<T>(server: Server, path: string, body: unknown): Promise<{ status: number; body: T }> {
+  return sendJsonRequest(server, "POST", path, body);
+}
+
+async function putJson<T>(server: Server, path: string, body: unknown): Promise<{ status: number; body: T }> {
+  return sendJsonRequest(server, "PUT", path, body);
+}
+
+async function sendJsonRequest<T>(server: Server, method: "POST" | "PUT", path: string, body: unknown): Promise<{ status: number; body: T }> {
   const address = server.address();
   if (!address || typeof address === "string") {
     throw new Error("Test server did not bind to a TCP port.");
   }
   const response = await nativeFetch(`http://127.0.0.1:${address.port}${path}`, {
-    method: "POST",
+    method,
     headers: {
       "content-type": "application/json"
     },
