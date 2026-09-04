@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.romdeck/
+.DS_Store
+*.log
+specs/
+packages/desktop-tauri/src-tauri/target/

@@ -1,0 +1,35 @@
+{
+  "name": "romdeck",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @romdeck/core && npm run build -w @romdeck/web-ui && npm run dev -w @romdeck/desktop-host",
+    "dev:tauri": "npm run dev -w @romdeck/desktop-tauri",
+    "build": "npm run build -w @romdeck/core && npm run build -w @romdeck/web-ui && npm run build -w @romdeck/desktop-host",
+    "prepare:tauri-host": "node scripts/prepare-tauri-host.mjs",
+    "build:tauri": "npm run build -w @romdeck/desktop-tauri",
+    "test": "npm run test -w @romdeck/core && npm run test -w @romdeck/desktop-host",
+    "typecheck": "npm run build -w @romdeck/core && npm run typecheck -w @romdeck/desktop-host && npm run typecheck -w @romdeck/web-ui && npm run typecheck -w @romdeck/desktop-tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^20.19.24",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "libarchive.js": "^2.0.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  }
+}

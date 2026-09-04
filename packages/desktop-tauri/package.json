@@ -1,0 +1,13 @@
+{
+  "name": "@romdeck/desktop-tauri",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "typecheck": "node -e \"JSON.parse(require('node:fs').readFileSync('src-tauri/tauri.conf.json', 'utf8'))\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

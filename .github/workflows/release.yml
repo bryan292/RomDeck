@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, for example v0.1.0
+        required: true
+        type: string
+      prerelease:
+        description: Mark as prerelease
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release-tauri:
+    name: Release ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon
+            platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
+          - label: macOS Intel
+            platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+          - label: Linux x64
+            platform: ubuntu-24.04
+            args: ""
+            rust-targets: ""
+          - label: Windows x64
+            platform: windows-latest
+            args: ""
+            rust-targets: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop-tauri/src-tauri -> target
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Publish Tauri Release Assets
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/desktop-tauri
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: RomDeck ${{ inputs.tag || github.ref_name }}
+          releaseBody: |
+            RomDeck desktop build.
+
+            Current MVP package note: this build bundles the web UI and JS host resources, but requires a local Node runtime to launch the backend.
+          releaseDraft: true
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || startsWith(github.ref_name, 'v0.') }}
+          args: ${{ matrix.args }}
