@@ -43,6 +43,8 @@ function App() {
   const completedDownloadIdsRef = useRef(completedDownloadIds);
   const queryRef = useRef(query);
   const selectedSystemRef = useRef(selectedSystem);
+  const searchRequestRef = useRef(0);
+  const resolveRequestRef = useRef(0);
   const nativeDialogsAvailable = canUseNativeDialogs();
 
   const selectedSystemConfig = config.systems[selectedSystem as keyof AppConfig["systems"]];
@@ -244,34 +246,55 @@ function App() {
     if (busy || !query.trim()) {
       return;
     }
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    resolveRequestRef.current += 1;
     setBusy(true);
     setSelectedResult(null);
     setCandidates([]);
     setStatus(`Searching ${selectedSystemInfo?.displayName ?? selectedSystem}...`);
     try {
       const response = await searchArchive(selectedSystem, query);
+      if (searchRequestRef.current !== requestId) {
+        return;
+      }
       setResults(response.results);
       setStatus(`Found ${response.results.length} result${response.results.length === 1 ? "" : "s"}.`);
     } catch (error) {
+      if (searchRequestRef.current !== requestId) {
+        return;
+      }
       setStatus(messageFromError(error));
     } finally {
-      setBusy(false);
+      if (searchRequestRef.current === requestId) {
+        setBusy(false);
+      }
     }
   }
 
   async function selectResult(result: SearchResultWithState) {
+    const requestId = resolveRequestRef.current + 1;
+    resolveRequestRef.current = requestId;
     setSelectedResult(result);
     setCandidates([]);
     setBusy(true);
     setStatus(`Inspecting compatible files for ${result.title}...`);
     try {
       const response = await resolveItem(result.itemId, result.systemKey, result.title);
+      if (resolveRequestRef.current !== requestId) {
+        return;
+      }
       setCandidates(response.candidates);
       setStatus(`Resolved ${response.candidates.length} candidate${response.candidates.length === 1 ? "" : "s"}.`);
     } catch (error) {
+      if (resolveRequestRef.current !== requestId) {
+        return;
+      }
       setStatus(messageFromError(error));
     } finally {
-      setBusy(false);
+      if (resolveRequestRef.current === requestId) {
+        setBusy(false);
+      }
     }
   }
 
