@@ -158,6 +158,7 @@ const server = createServer(async (request, response) => {
         sendError(response, 400, "System destination is not configured.");
         return;
       }
+      await validateWritableDirectory(systemConfig.destinationUri);
       const sourceFiles = await fetchInternetArchiveFiles(body.candidate.itemId);
       const resolvedCandidates = await enrichArchiveCandidates(resolveItemFiles({
         itemId: body.candidate.itemId,

@@ -24,6 +24,8 @@ import {
 import "./styles.css";
 
 type SearchResultWithState = SearchResult & { installed: boolean; installedState?: InstalledState };
+type Operation = "initializing" | "idle" | "saving" | "detecting" | "scanning" | "searching" | "resolving" | "queueing";
+type NoticeTone = "ready" | "busy" | "success" | "warning" | "error";
 
 function App() {
   const [systems, setSystems] = useState<SystemDefinition[]>([]);
@@ -39,6 +41,8 @@ function App() {
   const [selectedResult, setSelectedResult] = useState<SearchResultWithState | null>(null);
   const [candidates, setCandidates] = useState<DownloadCandidate[]>([]);
   const [status, setStatus] = useState("Ready");
+  const [statusTone, setStatusTone] = useState<NoticeTone>("ready");
+  const [operation, setOperation] = useState<Operation>("initializing");
   const [busy, setBusy] = useState(false);
   const completedDownloadIdsRef = useRef(completedDownloadIds);
   const queryRef = useRef(query);
@@ -93,6 +97,8 @@ function App() {
   }, [selectedSystem]);
 
   async function initialize() {
+    setOperation("initializing");
+    setBusy(true);
     try {
       const [systemResponse, configResponse, libraryResponse, downloadResponse] = await Promise.all([
         getSystems(),
@@ -104,8 +110,12 @@ function App() {
       setConfig(configResponse.config);
       setInstalled(libraryResponse.installed);
       setDownloads(downloadResponse.jobs);
+      setNotice("Ready", "ready");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
+    } finally {
+      setOperation("idle");
+      setBusy(false);
     }
   }
 
@@ -133,11 +143,12 @@ function App() {
 
   async function configureFolder() {
     if (!folderPath.trim()) {
-      setStatus("Enter a folder path first.");
+      setNotice("Enter a folder path first.", "warning");
       return;
     }
 
     setBusy(true);
+    setOperation("saving");
     try {
       const uri = await pathToUri(folderPath.trim());
       await validateFolder(uri.destinationUri);
@@ -153,20 +164,22 @@ function App() {
       };
       const saved = await saveConfig(nextConfig);
       setConfig(saved.config);
-      setStatus(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`);
+      setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
 
   async function chooseFolder() {
     setBusy(true);
+    setOperation("saving");
     try {
       const path = await pickDirectoryPath(`Choose ${selectedSystemInfo?.displayName ?? selectedSystem} ROM folder`);
       if (!path) {
-        setStatus("Folder selection canceled.");
+        setNotice("Folder selection canceled.", "warning");
         return;
       }
       setFolderPath(path);
@@ -184,16 +197,18 @@ function App() {
       };
       const saved = await saveConfig(nextConfig);
       setConfig(saved.config);
-      setStatus(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`);
+      setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
 
   async function configureDestination(destinationUri: string, label: string) {
     setBusy(true);
+    setOperation("saving");
     try {
       await validateFolder(destinationUri);
       const nextConfig: AppConfig = {
@@ -208,36 +223,41 @@ function App() {
       };
       const saved = await saveConfig(nextConfig);
       setConfig(saved.config);
-      setStatus(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved from ${label}.`);
+      setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved from ${label}.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
 
   async function detectEsdeFolders() {
     setBusy(true);
+    setOperation("detecting");
     try {
       const response = await getEsdeSuggestions();
       setEsdeSuggestions(response.suggestions);
-      setStatus(`Found ${response.suggestions.length} ES-DE folder suggestion${response.suggestions.length === 1 ? "" : "s"}.`);
+      setNotice(`Found ${response.suggestions.length} ES-DE folder suggestion${response.suggestions.length === 1 ? "" : "s"}.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
 
   async function runScan() {
     setBusy(true);
+    setOperation("scanning");
     try {
       const response = await scanLibrary();
       setInstalled(response.installed);
-      setStatus(`Scanned ${response.installed.length} installed game${response.installed.length === 1 ? "" : "s"}.`);
+      setNotice(`Scanned ${response.installed.length} installed game${response.installed.length === 1 ? "" : "s"}.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
@@ -250,23 +270,25 @@ function App() {
     searchRequestRef.current = requestId;
     resolveRequestRef.current += 1;
     setBusy(true);
+    setOperation("searching");
     setSelectedResult(null);
     setCandidates([]);
-    setStatus(`Searching ${selectedSystemInfo?.displayName ?? selectedSystem}...`);
+    setNotice(`Searching ${selectedSystemInfo?.displayName ?? selectedSystem}...`, "busy");
     try {
       const response = await searchArchive(selectedSystem, query);
       if (searchRequestRef.current !== requestId) {
         return;
       }
       setResults(response.results);
-      setStatus(`Found ${response.results.length} result${response.results.length === 1 ? "" : "s"}.`);
+      setNotice(`Found ${response.results.length} result${response.results.length === 1 ? "" : "s"}.`, response.results.length > 0 ? "success" : "warning");
     } catch (error) {
       if (searchRequestRef.current !== requestId) {
         return;
       }
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
       if (searchRequestRef.current === requestId) {
+        setOperation("idle");
         setBusy(false);
       }
     }
@@ -278,21 +300,23 @@ function App() {
     setSelectedResult(result);
     setCandidates([]);
     setBusy(true);
-    setStatus(`Inspecting compatible files for ${result.title}...`);
+    setOperation("resolving");
+    setNotice(`Inspecting compatible files for ${result.title}...`, "busy");
     try {
       const response = await resolveItem(result.itemId, result.systemKey, result.title);
       if (resolveRequestRef.current !== requestId) {
         return;
       }
       setCandidates(response.candidates);
-      setStatus(`Resolved ${response.candidates.length} candidate${response.candidates.length === 1 ? "" : "s"}.`);
+      setNotice(`Resolved ${response.candidates.length} candidate${response.candidates.length === 1 ? "" : "s"}.`, response.candidates.length > 0 ? "success" : "warning");
     } catch (error) {
       if (resolveRequestRef.current !== requestId) {
         return;
       }
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
       if (resolveRequestRef.current === requestId) {
+        setOperation("idle");
         setBusy(false);
       }
     }
@@ -300,13 +324,15 @@ function App() {
 
   async function download(candidate: DownloadCandidate) {
     setBusy(true);
+    setOperation("queueing");
     try {
       const response = await startDownload(candidate);
       setDownloads((current) => [response.job, ...current.filter((job) => job.id !== response.job.id)]);
-      setStatus(`Queued ${candidate.title}.`);
+      setNotice(`Queued ${candidate.title}.`, "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     } finally {
+      setOperation("idle");
       setBusy(false);
     }
   }
@@ -315,9 +341,9 @@ function App() {
     try {
       const response = await cancelDownload(jobId);
       setDownloads((current) => current.map((job) => job.id === jobId ? response.job : job));
-      setStatus("Download canceled.");
+      setNotice("Download canceled.", "warning");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     }
   }
 
@@ -325,10 +351,15 @@ function App() {
     try {
       const response = await clearDownloadHistory();
       setDownloads(response.jobs);
-      setStatus("Download history cleared.");
+      setNotice("Download history cleared.", "success");
     } catch (error) {
-      setStatus(messageFromError(error));
+      setNotice(messageFromError(error), "error");
     }
+  }
+
+  function setNotice(message: string, tone: NoticeTone): void {
+    setStatus(message);
+    setStatusTone(tone);
   }
 
   return (
@@ -338,7 +369,7 @@ function App() {
           <img className="brand-mark" src="/romdeck-icon.png" alt="" aria-hidden="true" />
           <div>
             <h1>RomDeck</h1>
-            <p className="status-line"><span className="pulse-dot" />{status}</p>
+            <p className={`status-line ${statusTone}`}><span className="pulse-dot" />{status}</p>
           </div>
         </div>
         <button className="primary-action" type="button" onClick={runScan} disabled={busy || !selectedSystemConfig?.destinationUri}>
@@ -411,7 +442,11 @@ function App() {
                 <StatusBadge tone="blue">{results.length}</StatusBadge>
               </div>
               <div className="result-list">
-                {results.length === 0 ? <div className="empty-state">Search results will appear here.</div> : null}
+                {results.length === 0 ? (
+                  <div className={`empty-state ${operation === "searching" ? "working" : ""}`}>
+                    {operation === "searching" ? "Searching provider..." : "Search results will appear here."}
+                  </div>
+                ) : null}
                 {results.map((result) => (
                   <button
                     key={result.itemId}
@@ -439,7 +474,11 @@ function App() {
               </div>
               <div className="candidate-list">
                 {!selectedResult ? <div className="empty-state">Select a result to inspect compatible files.</div> : null}
-                {selectedResult && candidates.length === 0 ? <div className="empty-state">Compatible files will appear after resolution.</div> : null}
+                {selectedResult && candidates.length === 0 ? (
+                  <div className={`empty-state ${operation === "resolving" ? "working" : ""}`}>
+                    {operation === "resolving" ? "Resolving compatible files..." : "Compatible files will appear after resolution."}
+                  </div>
+                ) : null}
                 {candidates.map((candidate) => (
                   <article key={candidate.id} className="candidate">
                     <div>
@@ -638,7 +677,13 @@ function StatusBadge({ children, tone }: { children: React.ReactNode; tone: "goo
 }
 
 function messageFromError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return "RomDeck host is not reachable. Reopen the app or check romdeck-host.log.";
+  }
+  return error.message;
 }
 
 function labelForResult(result: SearchResultWithState): string {
