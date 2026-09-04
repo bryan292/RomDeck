@@ -5,7 +5,7 @@ import { rankSearchResult } from "./searchRanking.js";
 import { SYSTEMS, isSystemKey } from "./systems.js";
 import { installedState } from "./matching.js";
 import { esdeDirectoryNamesForSystem } from "./esde.js";
-import { filterInstalledGames, summarizeInstalledSystems } from "./library.js";
+import { filterInstalledGames, findDuplicateInstalledGroups, summarizeInstalledSystems } from "./library.js";
 
 describe("resolveItemFiles", () => {
   it("returns only direct GBA files and rejects auxiliary files", () => {
@@ -452,6 +452,29 @@ describe("library helpers", () => {
     expect(summarizeInstalledSystems(installed)).toEqual([
       { systemKey: "gba", count: 2 },
       { systemKey: "n64", count: 1 }
+    ]);
+  });
+
+  it("groups duplicate installed variants by system and comparable title", () => {
+    const duplicates = findDuplicateInstalledGroups([
+      ...installed,
+      ...scanInstalledGames("gba", [
+        { name: "Metroid Fusion (Europe).gba" }
+      ]),
+      ...scanInstalledGames("n64", [
+        { name: "Metroid Fusion (USA).z64" }
+      ])
+    ]);
+
+    expect(duplicates).toHaveLength(1);
+    expect(duplicates[0]).toMatchObject({
+      systemKey: "gba",
+      comparableTitle: "metroid fusion",
+      fileCount: 2
+    });
+    expect(duplicates[0].games.map((game) => game.title)).toEqual([
+      "Metroid Fusion (Europe)",
+      "Metroid Fusion (USA)"
     ]);
   });
 });

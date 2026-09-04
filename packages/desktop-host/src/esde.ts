@@ -109,11 +109,30 @@ export function commonEsdeRomRoots(input: string | {
     }
   }
 
-  if (operatingSystem === "linux") {
+  if (operatingSystem === "darwin") {
     roots.push(
+      join(homeDirectory, "Documents", "ES-DE", "ROMs"),
+      join(homeDirectory, "Documents", "ES-DE", "roms"),
+      join(homeDirectory, "Documents", "Emulation", "roms"),
+      join(homeDirectory, "Documents", "ROMs")
+    );
+  }
+
+  if (operatingSystem === "linux") {
+    const user = env.USER || env.LOGNAME;
+    roots.push(
+      join(homeDirectory, ".var", "app", "org.es_de.EmulationStation-DE", "data", "ES-DE", "ROMs"),
+      join(homeDirectory, ".var", "app", "org.es_de.EmulationStation-DE", "data", "ES-DE", "roms"),
+      "/mnt/SDCARD/Emulation/roms",
       "/run/media/mmcblk0p1/Emulation/roms",
       "/run/media/deck/mmcblk0p1/Emulation/roms"
     );
+    if (user) {
+      roots.push(
+        `/run/media/${user}/Emulation/roms`,
+        `/media/${user}/Emulation/roms`
+      );
+    }
   }
 
   return [...new Set(roots)];

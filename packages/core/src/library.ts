@@ -10,6 +10,13 @@ export interface InstalledSystemSummary {
   count: number;
 }
 
+export interface InstalledDuplicateGroup {
+  systemKey: SystemKey;
+  comparableTitle: string;
+  games: InstalledGame[];
+  fileCount: number;
+}
+
 export function filterInstalledGames(installed: InstalledGame[], filter: InstalledLibraryFilter = {}): InstalledGame[] {
   const systemKey = filter.systemKey === "all" ? undefined : filter.systemKey;
   const query = normalizeLibraryQuery(filter.query ?? "");
@@ -32,6 +39,28 @@ export function filterInstalledGames(installed: InstalledGame[], filter: Install
       return query.split(/\s+/).every((term) => normalizedHaystack.includes(term));
     })
     .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+}
+
+export function findDuplicateInstalledGroups(installed: InstalledGame[]): InstalledDuplicateGroup[] {
+  const groups = new Map<string, InstalledGame[]>();
+
+  for (const game of installed) {
+    if (!game.comparableTitle) {
+      continue;
+    }
+    const key = `${game.systemKey}:${game.comparableTitle}`;
+    groups.set(key, [...(groups.get(key) ?? []), game]);
+  }
+
+  return [...groups.values()]
+    .filter((games) => games.length > 1)
+    .map((games) => ({
+      systemKey: games[0].systemKey,
+      comparableTitle: games[0].comparableTitle,
+      games: [...games].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" })),
+      fileCount: games.reduce((count, game) => count + game.files.length, 0)
+    }))
+    .sort((a, b) => a.systemKey.localeCompare(b.systemKey) || a.comparableTitle.localeCompare(b.comparableTitle));
 }
 
 export function summarizeInstalledSystems(installed: InstalledGame[]): InstalledSystemSummary[] {

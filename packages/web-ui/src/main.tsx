@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { filterInstalledGames, summarizeInstalledSystems } from "@romdeck/core";
+import { filterInstalledGames, findDuplicateInstalledGroups, summarizeInstalledSystems } from "@romdeck/core";
 import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition, SystemKey } from "@romdeck/core";
 import {
   canUseNativeDialogs,
@@ -106,6 +106,16 @@ function App() {
     return counts;
   }, [installed]);
   const installedSummary = useMemo(() => summarizeInstalledSystems(installed), [installed]);
+  const duplicateInstalledGroups = useMemo(() => findDuplicateInstalledGroups(installed), [installed]);
+  const duplicateInstalledKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const group of duplicateInstalledGroups) {
+      for (const game of group.games) {
+        keys.add(installedGameKey(game));
+      }
+    }
+    return keys;
+  }, [duplicateInstalledGroups]);
   const visibleInstalled = useMemo(
     () => filterInstalledGames(installed, {
       systemKey: installedScope === "selected" ? selectedSystem : "all",
@@ -732,7 +742,10 @@ function App() {
               <section className={`panel installed-panel scope-${installedScope}`}>
                 <div className="panel-heading">
                   <h2>Installed</h2>
-                  <StatusBadge tone="blue">{visibleInstalled.length}/{installed.length}</StatusBadge>
+                  <div className="heading-badges">
+                    {duplicateInstalledGroups.length > 0 ? <StatusBadge tone="amber">{duplicateInstalledGroups.length} dup</StatusBadge> : null}
+                    <StatusBadge tone="blue">{visibleInstalled.length}/{installed.length}</StatusBadge>
+                  </div>
                 </div>
                 <div className="installed-tools">
                   <div className="segmented-control" aria-label="Installed library scope">
@@ -771,12 +784,15 @@ function App() {
                   {installed.length === 0 ? <div className="empty-state">No installed games scanned.</div> : null}
                   {installed.length > 0 && visibleInstalled.length === 0 ? <div className="empty-state">No installed games match this filter.</div> : null}
                   {visibleInstalled.map((game) => (
-                    <div key={`${game.systemKey}:${game.title}`} className="installed-row">
+                    <div key={installedGameKey(game)} className="installed-row">
                       <span>
                         <strong>{game.title}</strong>
                         <small>{installedGameDetail(game)}</small>
                       </span>
-                      <StatusBadge tone="blue">{game.systemKey.toUpperCase()}</StatusBadge>
+                      <div className="row-badges">
+                        {duplicateInstalledKeys.has(installedGameKey(game)) ? <StatusBadge tone="amber">Duplicate</StatusBadge> : null}
+                        <StatusBadge tone="blue">{game.systemKey.toUpperCase()}</StatusBadge>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -902,6 +918,10 @@ function installedGameDetail(game: InstalledGame): string {
   }
   parts.push(`${game.files.length} file${game.files.length === 1 ? "" : "s"}`);
   return parts.join(" · ");
+}
+
+function installedGameKey(game: InstalledGame): string {
+  return `${game.systemKey}:${game.title}:${game.files.map((file) => file.relativePath ?? file.name).join("|")}`;
 }
 
 function downloadSummary(job: DownloadJob): string {

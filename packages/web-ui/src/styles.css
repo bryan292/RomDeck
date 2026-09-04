@@ -717,6 +717,14 @@ small {
   gap: 10px;
 }
 
+.heading-badges,
+.row-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .installed-summary {
   color: #9fc0e4;
 }
