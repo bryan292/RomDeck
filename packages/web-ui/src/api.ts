@@ -6,11 +6,19 @@ declare global {
   }
 }
 
-const API_BASE = typeof window !== "undefined" && window.__TAURI_INTERNALS__
-  ? "http://127.0.0.1:5137"
-  : "";
-const REQUEST_RETRIES = API_BASE ? 12 : 0;
+const API_BASE = defaultApiBase();
+const REQUEST_RETRIES = API_BASE ? 30 : 0;
 const REQUEST_RETRY_DELAY_MS = 350;
+
+function defaultApiBase(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+    return "";
+  }
+  return "http://127.0.0.1:5137";
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   let lastError: unknown;
