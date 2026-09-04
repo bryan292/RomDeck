@@ -549,7 +549,7 @@ function DownloadRow({ job, onCancel }: { job: DownloadJob; onCancel: (jobId: st
       </div>
       <div className="download-row-foot">
         <small>{formatBytes(job.downloadedBytes)} / {formatBytes(job.bytesTotal)}</small>
-        <small>{job.extractedBytes > 0 ? `Extracted ${formatBytes(job.extractedBytes)}` : job.currentFile ?? "Waiting"}</small>
+        <small>{downloadDetail(job)}</small>
         {!isTerminalDownload(job) ? (
           <button type="button" onClick={() => void onCancel(job.id)}>
             Cancel
@@ -620,6 +620,25 @@ function downloadSummary(job: DownloadJob): string {
     parts.push(job.error);
   }
   return parts.join(" · ");
+}
+
+function downloadDetail(job: DownloadJob): string {
+  if (job.status === "complete") {
+    return job.extractedBytes > 0 ? `Extracted ${formatBytes(job.extractedBytes)}` : "Complete";
+  }
+  if (job.status === "skipped") {
+    return "Already installed";
+  }
+  if (job.status === "failed") {
+    return job.error ?? "Failed";
+  }
+  if (job.status === "canceled") {
+    return "Canceled";
+  }
+  if (job.extractedBytes > 0) {
+    return `Extracted ${formatBytes(job.extractedBytes)}`;
+  }
+  return job.currentFile ?? "Waiting";
 }
 
 function downloadProgress(job: DownloadJob): number {

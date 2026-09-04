@@ -147,6 +147,7 @@ small {
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr);
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -337,6 +338,7 @@ small {
 
 .content-grid {
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(260px, 0.8fr) minmax(340px, 1.1fr) minmax(300px, 0.9fr);
   gap: 12px;
@@ -355,6 +357,7 @@ small {
 .candidate-panel,
 .inspector {
   min-height: 0;
+  overflow: hidden;
 }
 
 .results-panel,
@@ -375,8 +378,17 @@ small {
 
 .inspector {
   display: grid;
-  grid-template-rows: auto minmax(160px, 1fr) minmax(120px, 0.55fr);
+  grid-template-rows: auto minmax(140px, 1fr) minmax(0, 0.55fr);
   gap: 12px;
+}
+
+.destination-panel {
+  overflow: hidden;
+}
+
+.downloads-panel,
+.installed-panel {
+  overflow: hidden;
 }
 
 .panel-heading {
@@ -407,6 +419,7 @@ small {
 .download-list,
 .compact-list {
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .result-list button {
