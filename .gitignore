@@ -2,8 +2,10 @@ node_modules/
 dist/
 dist-types/
 .romdeck/
+.cache/
 .DS_Store
 *.log
 *.tsbuildinfo
 specs/
 packages/desktop-tauri/src-tauri/target/
+packages/desktop-tauri/src-tauri/resources/host/node-runtime/

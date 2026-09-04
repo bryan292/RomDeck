@@ -93,7 +93,7 @@ fn start_desktop_host(app: &mut tauri::App) {
         }
     };
 
-    let node_path = node_executable();
+    let node_path = node_executable(app);
     let child = Command::new(&node_path)
         .arg(server_path)
         .env("PORT", "5137")
@@ -115,12 +115,22 @@ fn start_desktop_host(app: &mut tauri::App) {
         }
     }
 
-    fn node_executable() -> PathBuf {
+    fn node_executable(app: &tauri::App) -> PathBuf {
+        for resource in ["host/node-runtime/node.exe", "host/node-runtime/bin/node"] {
+            if let Ok(path) = app.path().resolve(resource, BaseDirectory::Resource) {
+                if path.exists() {
+                    return path;
+                }
+            }
+        }
+
         for candidate in [
             "/opt/homebrew/opt/node@20/bin/node",
             "/opt/homebrew/bin/node",
             "/usr/local/bin/node",
             "/usr/bin/node",
+            "node.exe",
+            "node",
         ] {
             let path = PathBuf::from(candidate);
             if path.exists() {
