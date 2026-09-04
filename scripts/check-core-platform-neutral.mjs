@@ -1,14 +1,11 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import { execFileSync } from "node:child_process";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const sourceFiles = execFileSync("rg", ["--files", "packages/core/src"], {
-  cwd: root,
-  encoding: "utf8"
-}).trim().split("\n").filter(Boolean);
+const sourceRoot = join(root, "packages/core/src");
+const sourceFiles = collectSourceFiles(sourceRoot);
 
 const forbiddenImportPatterns = [
   /\bfrom\s+["']node:/,
@@ -44,4 +41,23 @@ if (failures.length > 0) {
     console.error(`- ${failure}`);
   }
   process.exit(1);
+}
+
+function collectSourceFiles(directory) {
+  const entries = readdirSync(directory, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const absolutePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectSourceFiles(absolutePath));
+      continue;
+    }
+
+    if (/\.(?:ts|tsx|js|mjs)$/.test(entry.name)) {
+      files.push(relative(root, absolutePath));
+    }
+  }
+
+  return files.sort();
 }
