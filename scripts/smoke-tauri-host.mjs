@@ -3,19 +3,23 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const hostRoot = process.env.ROMDECK_SMOKE_HOST_ROOT ?? join(root, "packages/desktop-tauri/src-tauri/resources/host");
-const nodePath = bundledNodePath();
+const targetPlatform = normalizedTargetPlatform();
+const targetArch = process.env.ROMDECK_NODE_ARCH ?? process.arch;
+const bundledNode = bundledNodePath();
+const nodePath = runnableNodePath(bundledNode);
 const serverDir = join(hostRoot, "desktop-host/dist");
 const serverEntry = join(serverDir, "server.js");
 const webEntry = join(hostRoot, "web-ui/dist/index.html");
-const port = Number(process.env.ROMDECK_SMOKE_PORT ?? 5138);
+const port = Number(process.env.ROMDECK_SMOKE_PORT ?? await availablePort());
 const sessionToken = "smoke-token";
 const configDir = mkdtempSync(join(tmpdir(), "romdeck-smoke-config-"));
 const logFile = join(configDir, "romdeck-host.log");
 
-verify(nodePath, "bundled Node runtime");
+verify(bundledNode, "bundled Node runtime");
 verify(serverEntry, "desktop host entrypoint");
 verify(webEntry, "web UI entrypoint");
 
@@ -32,8 +36,13 @@ const child = spawn(nodePath, ["server.js"], {
 });
 
 const output = [];
+let spawnError;
 child.stdout.on("data", (chunk) => output.push(chunk.toString()));
 child.stderr.on("data", (chunk) => output.push(chunk.toString()));
+child.on("error", (error) => {
+  spawnError = error;
+  output.push(error instanceof Error ? error.message : String(error));
+});
 
 try {
   await waitForHealth();
@@ -42,7 +51,7 @@ try {
   await assertUnauthorizedSystems();
   await assertStaticIndex();
 } finally {
-  child.kill();
+  await stopChild();
 }
 
 function bundledNodePath() {
@@ -54,6 +63,26 @@ function bundledNodePath() {
   return posixNode;
 }
 
+function runnableNodePath(targetNodePath) {
+  if (targetPlatform === normalizedCurrentPlatform() && targetArch === process.arch) {
+    return targetNodePath;
+  }
+  console.warn(
+    `Packaged Node runtime is ${targetPlatform}-${targetArch}; runner is ${normalizedCurrentPlatform()}-${process.arch}. ` +
+    "Using current Node runtime for host smoke after verifying packaged runtime exists."
+  );
+  return process.execPath;
+}
+
+function normalizedTargetPlatform() {
+  const platform = process.env.ROMDECK_NODE_PLATFORM ?? process.platform;
+  return platform === "win32" ? "win" : platform;
+}
+
+function normalizedCurrentPlatform() {
+  return process.platform === "win32" ? "win" : process.platform;
+}
+
 function verify(path, label) {
   if (!existsSync(path)) {
     throw new Error(`Missing ${label}: ${path}`);
@@ -63,6 +92,9 @@ function verify(path, label) {
 async function waitForHealth() {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
+    if (spawnError) {
+      throw new Error(`Host could not be started with ${nodePath}.\n${output.join("")}`);
+    }
     if (child.exitCode !== null) {
       throw new Error(`Host exited early with code ${child.exitCode}.\n${output.join("")}`);
     }
@@ -109,4 +141,32 @@ async function assertStaticIndex() {
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function availablePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Could not allocate smoke test port.")));
+        return;
+      }
+      const selectedPort = address.port;
+      server.close((error) => error ? reject(error) : resolve(selectedPort));
+    });
+  });
+}
+
+function stopChild() {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    child.once("exit", () => resolve());
+    child.kill();
+    setTimeout(resolve, 1000);
+  });
 }
