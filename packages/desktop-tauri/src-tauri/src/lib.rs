@@ -78,9 +78,9 @@ pub fn run() {
 fn start_desktop_host(app: &mut tauri::App) {
     use tauri::{path::BaseDirectory, Manager};
 
-    let server_path = match app
+    let server_dir = match app
         .path()
-        .resolve("host/desktop-host/dist/server.js", BaseDirectory::Resource)
+        .resolve("host/desktop-host/dist", BaseDirectory::Resource)
     {
         Ok(path) => path,
         Err(error) => {
@@ -89,19 +89,11 @@ fn start_desktop_host(app: &mut tauri::App) {
         }
     };
 
-    let resource_root = match app.path().resolve("host", BaseDirectory::Resource) {
-        Ok(path) => path,
-        Err(error) => {
-            eprintln!("RomDeck host resource root not found: {error}");
-            return;
-        }
-    };
-
     let node_path = node_executable(app);
     let mut command = Command::new(&node_path);
-    command.arg(server_path)
+    command.arg("server.js")
         .env("PORT", "5137")
-        .current_dir(resource_root)
+        .current_dir(server_dir)
         .stdin(Stdio::null());
 
     if let Some(log_file) = host_log_file() {
