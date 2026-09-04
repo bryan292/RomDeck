@@ -196,21 +196,3 @@ jobs:
           prerelease: ${{ needs.prepare-release.outputs.prerelease }}
           releaseAssetNamePattern: RomDeck_[version]_[platform]_[arch][setup][ext]
           args: ${{ matrix.args }}
-
-      - name: Upload Executables To Draft Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare-release.outputs.tag }}
-          draft: true
-          prerelease: ${{ needs.prepare-release.outputs.prerelease }}
-          files: |
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.dmg
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.app.tar.gz
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.AppImage
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.deb
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.rpm
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.msi
-            packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.exe
-            packages/desktop-tauri/src-tauri/target/**/release/romdeck
-            packages/desktop-tauri/src-tauri/target/**/release/romdeck.exe
-          fail_on_unmatched_files: false
