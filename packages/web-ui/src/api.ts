@@ -14,7 +14,10 @@ function defaultApiBase(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+  if (
+    (window.location.protocol === "http:" || window.location.protocol === "https:") &&
+    (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+  ) {
     return "";
   }
   return "http://127.0.0.1:5137";
