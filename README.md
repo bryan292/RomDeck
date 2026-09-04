@@ -58,10 +58,11 @@ Build outputs are written to:
 - `packages/desktop-tauri/src-tauri/target/release/bundle/macos/RomDeck.app`
 - `packages/desktop-tauri/src-tauri/target/release/bundle/dmg/RomDeck_0.1.0_aarch64.dmg`
 
-For this MVP, the Tauri bundle includes the compiled web UI, desktop host, and
-minimal runtime `node_modules`, then starts the host with the local Node runtime
-installed on the machine. A future production package should replace that with a
-self-contained sidecar binary or native Tauri commands.
+The Tauri bundle includes the compiled web UI, desktop host, minimal runtime
+`node_modules`, and a packaged Node runtime for the local backend. The
+production direction is still to replace the HTTP host with native Tauri
+commands or a smaller dedicated sidecar, but users should not need to install
+Node to launch packaged builds.
 
 ### Release Trust
 

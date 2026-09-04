@@ -143,6 +143,25 @@ async function copyNodeRuntime() {
   chmodSync(join(nodeRuntimeRoot, "bin/node"), 0o755);
 }
 
+function verifyFile(path, label) {
+  if (!existsSync(path)) {
+    throw new Error(`Missing packaged ${label}: ${path}`);
+  }
+}
+
+function verifyPreparedResources() {
+  const platform = nodePlatform();
+  verifyFile(join(resourcesRoot, "desktop-host/dist/server.js"), "desktop host entrypoint");
+  verifyFile(join(resourcesRoot, "web-ui/dist/index.html"), "web UI entrypoint");
+  verifyFile(join(nodeModulesRoot, "@romdeck/core/package.json"), "core package");
+  verifyFile(join(nodeModulesRoot, "fflate/package.json"), "fflate dependency");
+  verifyFile(join(nodeModulesRoot, "libarchive.js/package.json"), "libarchive.js dependency");
+  verifyFile(
+    platform === "win" ? join(nodeRuntimeRoot, "node.exe") : join(nodeRuntimeRoot, "bin/node"),
+    "Node runtime"
+  );
+}
+
 rmSync(resourcesRoot, { recursive: true, force: true });
 mkdirSync(nodeModulesRoot, { recursive: true });
 
@@ -157,3 +176,4 @@ copyPackage("node_modules/libarchive.js", "libarchive.js");
 copyPackage("node_modules/comlink", "comlink");
 
 await copyNodeRuntime();
+verifyPreparedResources();
