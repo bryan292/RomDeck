@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { filterInstalledGames, findDuplicateInstalledGroups, summarizeInstalledSystems } from "@romdeck/core";
+import { candidateInstalledState, filterInstalledGames, findDuplicateInstalledGroups, matchingInstalledGamesForCandidate, summarizeInstalledSystems } from "@romdeck/core";
 import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition, SystemKey } from "@romdeck/core";
 import {
   canUseNativeDialogs,
@@ -580,47 +580,56 @@ function App() {
                     {operation === "resolving" ? "Resolving compatible files..." : "Compatible files will appear after resolution."}
                   </div>
                 ) : null}
-                {candidates.map((candidate) => (
-                  <article key={candidate.id} className="candidate">
-                    <div>
-                      <div className="candidate-title-row">
-                        <strong>{candidate.title}</strong>
-                        <StatusBadge tone={candidateStatusTone(candidate, config)}>
-                          {candidateStatusLabel(candidate, config)}
-                        </StatusBadge>
-                      </div>
-                      <div className="candidate-meta">
-                        <span>{candidate.format}</span>
-                        <span>{candidate.fileCount} file{candidate.fileCount === 1 ? "" : "s"}</span>
-                        <span>{formatBytes(candidate.totalSize)}</span>
-                      </div>
-                      <ConfidenceMeter value={candidate.confidence} />
-                      <span>{candidate.reason}</span>
-                      <small>
-                        {candidate.files.map((file) => file.targetName).join(", ")}
-                      </small>
-                      {candidate.extractedFiles ? (
+                {candidates.map((candidate) => {
+                  const localInstalledState = candidateInstalledState(candidate, installed);
+                  const localMatches = matchingInstalledGamesForCandidate(candidate, installed);
+                  return (
+                    <article key={candidate.id} className="candidate">
+                      <div>
+                        <div className="candidate-title-row">
+                          <strong>{candidate.title}</strong>
+                          <StatusBadge tone={candidateStatusTone(candidate, config)}>
+                            {candidateStatusLabel(candidate, config)}
+                          </StatusBadge>
+                        </div>
+                        <div className="candidate-meta">
+                          <span>{candidate.format}</span>
+                          <span>{candidate.fileCount} file{candidate.fileCount === 1 ? "" : "s"}</span>
+                          <span>{formatBytes(candidate.totalSize)}</span>
+                        </div>
+                        <ConfidenceMeter value={candidate.confidence} />
+                        <span>{candidate.reason}</span>
                         <small>
-                          Extracts: {candidate.extractedFiles.map((file) => file.name).join(", ")}
+                          {candidate.files.map((file) => file.targetName).join(", ")}
                         </small>
-                      ) : null}
-                      {candidate.warnings.length > 0 ? <small>{candidate.warnings.join(" ")}</small> : null}
-                    </div>
-                    <div className="candidate-actions">
-                      {!hasCandidateDestination(candidate, config) || !candidate.canDownload ? (
-                        <small className="candidate-warning">{downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}</small>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => void download(candidate)}
-                        disabled={busy || !hasCandidateDestination(candidate, config) || !candidate.canDownload}
-                        title={downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}
-                      >
-                        {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
-                      </button>
-                    </div>
-                  </article>
-                ))}
+                        {candidate.extractedFiles ? (
+                          <small>
+                            Extracts: {candidate.extractedFiles.map((file) => file.name).join(", ")}
+                          </small>
+                        ) : null}
+                        {candidate.warnings.length > 0 ? <small>{candidate.warnings.join(" ")}</small> : null}
+                      </div>
+                      <div className="candidate-actions">
+                        {localInstalledState !== "missing" ? (
+                          <small className={`candidate-local-match ${localInstalledState}`}>
+                            {candidateLocalMatchLabel(localInstalledState, localMatches)}
+                          </small>
+                        ) : null}
+                        {!hasCandidateDestination(candidate, config) || !candidate.canDownload ? (
+                          <small className="candidate-warning">{downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}</small>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => void download(candidate)}
+                          disabled={busy || !hasCandidateDestination(candidate, config) || !candidate.canDownload}
+                          title={downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}
+                        >
+                          {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </section>
 
@@ -985,6 +994,16 @@ function downloadDisabledReason(candidate: DownloadCandidate, hasDestination: bo
     return candidate.warnings[0] ?? "Candidate is unavailable.";
   }
   return "Download";
+}
+
+function candidateLocalMatchLabel(state: InstalledState, matches: InstalledGame[]): string {
+  const prefix = state === "installed" ? "Already installed" : "Possible local match";
+  const titles = matches.slice(0, 2).map((game) => game.title);
+  if (titles.length === 0) {
+    return prefix;
+  }
+  const suffix = matches.length > titles.length ? ` +${matches.length - titles.length}` : "";
+  return `${prefix}: ${titles.join(", ")}${suffix}`;
 }
 
 function downloadProgress(job: DownloadJob): number {

@@ -3,7 +3,7 @@ import { resolveItemFiles } from "./resolver.js";
 import { scanInstalledGames } from "./scanner.js";
 import { rankSearchResult } from "./searchRanking.js";
 import { SYSTEMS, isSystemKey } from "./systems.js";
-import { installedState } from "./matching.js";
+import { candidateInstalledState, installedState, matchingInstalledGamesForCandidate } from "./matching.js";
 import { esdeDirectoryNamesForSystem } from "./esde.js";
 import { filterInstalledGames, findDuplicateInstalledGroups, summarizeInstalledSystems } from "./library.js";
 
@@ -476,5 +476,47 @@ describe("library helpers", () => {
       "Metroid Fusion (Europe)",
       "Metroid Fusion (USA)"
     ]);
+  });
+
+  it("reports installed state for resolved download candidates", () => {
+    const candidate = resolveItemFiles({
+      itemId: "metroid-fusion",
+      title: "Metroid Fusion",
+      systemKey: "gba",
+      files: [
+        { name: "Metroid Fusion (USA).gba", size: 3 }
+      ]
+    })[0];
+
+    expect(candidateInstalledState(candidate, installed)).toBe("installed");
+    expect(matchingInstalledGamesForCandidate(candidate, installed).map((game) => game.title)).toEqual([
+      "Metroid Fusion (USA)"
+    ]);
+  });
+
+  it("reports possible candidate matches without crossing systems", () => {
+    const regionalVariant = resolveItemFiles({
+      itemId: "metroid-fusion-europe",
+      title: "Metroid Fusion",
+      systemKey: "gba",
+      files: [
+        { name: "Metroid Fusion (Europe).gba", size: 3 }
+      ]
+    })[0];
+    const candidate = resolveItemFiles({
+      itemId: "metroid-fusion-europe",
+      title: "Metroid Fusion",
+      systemKey: "n64",
+      files: [
+        { name: "Metroid Fusion (Europe).z64", size: 3 }
+      ]
+    })[0];
+
+    expect(candidateInstalledState(regionalVariant, installed)).toBe("possible");
+    expect(matchingInstalledGamesForCandidate(regionalVariant, installed).map((game) => game.title)).toEqual([
+      "Metroid Fusion (USA)"
+    ]);
+    expect(candidateInstalledState(candidate, installed)).toBe("missing");
+    expect(matchingInstalledGamesForCandidate(candidate, installed)).toHaveLength(0);
   });
 });

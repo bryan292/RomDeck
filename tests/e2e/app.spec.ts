@@ -14,6 +14,7 @@ test("configure, search, resolve, and show installed library state", async ({ pa
 
   await expect(page.getByRole("heading", { name: "Metroid Fusion" })).toBeVisible();
   await expect(page.getByText("Extracts: Metroid Fusion (USA).gba")).toBeVisible();
+  await expect(page.getByText(/Already installed: Metroid Fusion/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Download + Extract" })).toBeEnabled();
 });
 

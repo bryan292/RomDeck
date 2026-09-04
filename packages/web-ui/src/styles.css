@@ -565,6 +565,21 @@ small {
   text-align: right;
 }
 
+.candidate-local-match {
+  border: 1px solid rgba(255, 194, 24, 0.34);
+  border-radius: 6px;
+  background: rgba(255, 194, 24, 0.09);
+  color: #ffd875;
+  padding: 6px 8px;
+  text-align: right;
+}
+
+.candidate-local-match.installed {
+  border-color: rgba(27, 224, 103, 0.34);
+  background: rgba(27, 224, 103, 0.08);
+  color: #78f3a9;
+}
+
 .candidate-title-row strong {
   overflow: hidden;
   color: #ffffff;
