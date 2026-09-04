@@ -21,6 +21,9 @@ interface MetadataResponse {
     size?: string;
     format?: string;
     source?: string;
+    crc32?: string;
+    md5?: string;
+    sha1?: string;
   }>;
 }
 
@@ -182,7 +185,10 @@ async function fetchMetadataFiles(itemId: string): Promise<SourceFile[]> {
       name: file.name as string,
       size: file.size ? Number(file.size) : undefined,
       format: file.format,
-      source: file.source
+      source: file.source,
+      crc32: file.crc32,
+      md5: file.md5,
+      sha1: file.sha1
     }));
   metadataCache.set(itemId, {
     expiresAt: Date.now() + METADATA_CACHE_TTL_MS,

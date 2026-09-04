@@ -292,7 +292,10 @@ function candidateFromFiles(params: {
       sourceUrl: buildArchiveDownloadUrl(params.itemId, file.name),
       sourceName: file.name,
       targetName: safeTargetName(file.name),
-      size: file.size
+      size: file.size,
+      crc32: file.crc32,
+      md5: file.md5,
+      sha1: file.sha1
     })),
     fileCount: params.files.length,
     totalSize: params.files.reduce((sum, file) => sum + (file.size ?? 0), 0) || undefined,

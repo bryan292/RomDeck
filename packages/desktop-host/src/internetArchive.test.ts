@@ -36,7 +36,13 @@ describe("Internet Archive adapter cache", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return jsonResponse({
         files: [
-          { name: "Metroid Fusion.gba", size: "8388608", format: "Game Boy Advance ROM" }
+          {
+            name: "Metroid Fusion.gba",
+            size: "8388608",
+            format: "Game Boy Advance ROM",
+            md5: "a4df",
+            sha1: "8f2b"
+          }
         ]
       });
     });
@@ -47,7 +53,15 @@ describe("Internet Archive adapter cache", () => {
       fetchInternetArchiveFiles("metroid-fusion")
     ]);
 
-    expect(first).toEqual([{ name: "Metroid Fusion.gba", size: 8388608, format: "Game Boy Advance ROM", source: undefined }]);
+    expect(first).toEqual([{
+      name: "Metroid Fusion.gba",
+      size: 8388608,
+      format: "Game Boy Advance ROM",
+      source: undefined,
+      crc32: undefined,
+      md5: "a4df",
+      sha1: "8f2b"
+    }]);
     expect(second).toEqual(first);
     expect(fetch).toHaveBeenCalledTimes(1);
   });

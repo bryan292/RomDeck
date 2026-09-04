@@ -174,6 +174,42 @@ describe("downloadManager", () => {
     expect(await readFile(join(destination, "Retry Test.gba"))).toEqual(Buffer.from([4, 5, 6]));
   });
 
+  it("keeps direct downloads with matching provider checksums", async () => {
+    const server = await serveBuffer(new Uint8Array([1, 2, 3]));
+    const destination = await mkdtemp(join(tmpdir(), "romdeck-checksum-ok-test-roms-"));
+
+    const job = await enqueueDownload(testDirectCandidate({
+      title: "Checksum OK Test",
+      targetName: "Checksum OK Test.gba",
+      sourceUrl: server.url,
+      size: 3,
+      sha1: "7037807198c22a7d2b0807371d763779a84fdfcf"
+    }), pathToFileUri(destination));
+    const completed = await waitForJob(job.id);
+
+    expect(completed.status).toBe("complete");
+    expect(await readFile(join(destination, "Checksum OK Test.gba"))).toEqual(Buffer.from([1, 2, 3]));
+  });
+
+  it("fails direct downloads with provider checksum mismatches before finalizing", async () => {
+    const server = await serveBuffer(new Uint8Array([1, 2, 3]));
+    const destination = await mkdtemp(join(tmpdir(), "romdeck-checksum-fail-test-roms-"));
+
+    const job = await enqueueDownload(testDirectCandidate({
+      title: "Checksum Fail Test",
+      targetName: "Checksum Fail Test.gba",
+      sourceUrl: server.url,
+      size: 3,
+      sha1: "e809c5d1cea47b45e34701d23f608a9a58034dc9"
+    }), pathToFileUri(destination));
+    const completed = await waitForJob(job.id);
+
+    expect(completed.status).toBe("failed");
+    expect(completed.error).toContain("Checksum mismatch");
+    await expect(stat(join(destination, "Checksum Fail Test.gba"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(destination, "Checksum Fail Test.gba.part"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("fails instead of overwriting an existing direct file with a different size", async () => {
     const server = await serveBuffer(new Uint8Array([4, 5, 6]));
     const destination = await mkdtemp(join(tmpdir(), "romdeck-overwrite-test-roms-"));
@@ -241,7 +277,7 @@ describe("downloadManager", () => {
   });
 });
 
-function testDirectCandidate(options: { title: string; targetName: string; sourceUrl: string; size?: number }): DownloadCandidate {
+function testDirectCandidate(options: { title: string; targetName: string; sourceUrl: string; size?: number; md5?: string; sha1?: string }): DownloadCandidate {
   return {
     id: `test|gba|${options.targetName}`,
     source: "internet-archive",
@@ -254,7 +290,9 @@ function testDirectCandidate(options: { title: string; targetName: string; sourc
         sourceUrl: options.sourceUrl,
         sourceName: options.targetName,
         targetName: options.targetName,
-        size: options.size ?? 1
+        size: options.size ?? 1,
+        md5: options.md5,
+        sha1: options.sha1
       }
     ],
     fileCount: 1,

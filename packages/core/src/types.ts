@@ -42,6 +42,9 @@ export interface SourceFile {
   size?: number;
   format?: string;
   source?: string;
+  crc32?: string;
+  md5?: string;
+  sha1?: string;
 }
 
 export interface SearchResult {
@@ -65,6 +68,9 @@ export interface ResolvedFile {
   sourceName: string;
   targetName: string;
   size?: number;
+  crc32?: string;
+  md5?: string;
+  sha1?: string;
 }
 
 export interface DownloadCandidate {

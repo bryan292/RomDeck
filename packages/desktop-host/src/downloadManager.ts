@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -11,7 +11,8 @@ import {
   planDownloadJob,
   safeTargetName,
   type DownloadCandidate,
-  type PlannedDownloadJob
+  type PlannedDownloadJob,
+  type ResolvedFile
 } from "@romdeck/core";
 import {
   ensureDirectory,
@@ -193,7 +194,7 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
           throw new Error(`Target file already exists with different size: ${file.targetName}`);
         }
         skippedAll = false;
-        await runTransferWithRetries(job, controller.signal, () => downloadFile(file.sourceUrl, targetPath, file.size, job, controller.signal));
+        await runTransferWithRetries(job, controller.signal, () => downloadFile(file, targetPath, job, controller.signal));
       }
     }
 
@@ -359,14 +360,14 @@ async function downloadAndExtractZip(url: string, size: number | undefined, job:
   }
 }
 
-async function downloadFile(url: string, targetPath: string, size: number | undefined, job: RuntimeDownloadJob, signal: AbortSignal): Promise<void> {
+async function downloadFile(file: ResolvedFile, targetPath: string, job: RuntimeDownloadJob, signal: AbortSignal): Promise<void> {
   await removePartial(targetPath);
   try {
-    const response = await fetch(url, { signal });
+    const response = await fetch(file.sourceUrl, { signal });
     if (!response.ok || !response.body) {
       throw new Error(`Download failed with HTTP ${response.status}`);
     }
-    const total = Number(response.headers.get("content-length")) || size;
+    const total = Number(response.headers.get("content-length")) || file.size;
     if (total && !job.bytesTotal) {
       job.bytesTotal = total;
     }
@@ -383,11 +384,48 @@ async function downloadFile(url: string, targetPath: string, size: number | unde
 
     const readable = Readable.fromWeb(response.body.pipeThrough(progressStream) as unknown as import("node:stream/web").ReadableStream);
     await pipeline(readable, openPartialWriteStream(targetPath));
+    await validateDownloadedFileChecksum(`${targetPath}.part`, file);
     await finalizePartial(targetPath);
   } catch (error) {
     await removePartial(targetPath);
     throw error;
   }
+}
+
+async function validateDownloadedFileChecksum(partialPath: string, file: ResolvedFile): Promise<void> {
+  const expected = normalizedExpectedChecksum(file);
+  if (!expected) {
+    return;
+  }
+
+  const actual = await hashFile(partialPath, expected.algorithm);
+  if (actual !== expected.value) {
+    throw new Error(`Checksum mismatch for ${file.targetName}: expected ${expected.algorithm} ${expected.value}, got ${actual}`);
+  }
+}
+
+function normalizedExpectedChecksum(file: ResolvedFile): { algorithm: "sha1" | "md5"; value: string } | undefined {
+  if (file.sha1) {
+    return { algorithm: "sha1", value: normalizeChecksum(file.sha1) };
+  }
+  if (file.md5) {
+    return { algorithm: "md5", value: normalizeChecksum(file.md5) };
+  }
+  return undefined;
+}
+
+function normalizeChecksum(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function hashFile(path: string, algorithm: "sha1" | "md5"): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash(algorithm);
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
 }
 
 async function runTransferWithRetries(job: RuntimeDownloadJob, signal: AbortSignal, transfer: () => Promise<void>): Promise<void> {
