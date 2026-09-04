@@ -72,7 +72,8 @@ small {
 }
 
 .app {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 640px;
   display: grid;
   grid-template-rows: 72px 1fr 34px;
   background:
@@ -412,7 +413,7 @@ small {
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(340px, 1.1fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(300px, 0.85fr) minmax(360px, 1.1fr) minmax(300px, 0.85fr);
   gap: 12px;
 }
 
@@ -452,9 +453,13 @@ small {
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
+.installed-panel.scope-all {
+  grid-template-rows: auto auto auto minmax(220px, 1fr);
+}
+
 .inspector {
   display: grid;
-  grid-template-rows: auto minmax(140px, 1fr) minmax(0, 0.55fr);
+  grid-template-rows: auto minmax(132px, 0.72fr) minmax(220px, 1fr);
   gap: 12px;
 }
 
@@ -500,13 +505,17 @@ small {
 
 .result-list button {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 58px;
+  min-height: 72px;
   padding: 9px;
   text-align: left;
+}
+
+.result-list button > .status-badge {
+  justify-self: start;
 }
 
 .result-list button.selected-result {
@@ -516,13 +525,25 @@ small {
 
 .candidate {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, auto);
   gap: 12px;
-  align-items: center;
+  align-items: start;
   border: 1px solid #263d5d;
   border-radius: 8px;
   background: rgba(7, 24, 39, 0.92);
   padding: 12px;
+}
+
+.candidate-actions {
+  min-width: 128px;
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+}
+
+.candidate-actions button {
+  min-width: 0;
+  white-space: normal;
 }
 
 .candidate > div {
@@ -540,6 +561,7 @@ small {
 
 .candidate-warning {
   color: #ffd875;
+  text-align: right;
 }
 
 .candidate-title-row strong {
@@ -839,20 +861,47 @@ small {
   font-size: 12px;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1380px) {
   .content-grid {
-    grid-template-columns: minmax(260px, 0.9fr) minmax(340px, 1.1fr);
+    grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 1.1fr);
   }
 
   .inspector {
     grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(240px, 1fr));
+    grid-template-columns: minmax(280px, 0.9fr) minmax(240px, 0.72fr) minmax(320px, 1.15fr);
     grid-template-rows: auto;
+  }
+
+  .download-list,
+  .compact-list {
+    max-height: 340px;
+  }
+}
+
+@media (max-width: 1160px) {
+  .candidate {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-actions {
+    width: 100%;
+    min-width: 0;
+    justify-items: start;
+  }
+
+  .candidate-actions button {
+    width: 100%;
+  }
+
+  .candidate-warning {
+    text-align: left;
   }
 }
 
 @media (max-width: 900px) {
   .app {
+    height: auto;
+    min-height: 100vh;
     grid-template-rows: auto 1fr auto;
   }
 
@@ -880,5 +929,10 @@ small {
   .folder-form,
   .installed-tools {
     grid-template-columns: 1fr;
+  }
+
+  .download-list,
+  .compact-list {
+    max-height: none;
   }
 }

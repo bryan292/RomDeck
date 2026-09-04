@@ -625,17 +625,19 @@ function App() {
                       ) : null}
                       {candidate.warnings.length > 0 ? <small>{candidate.warnings.join(" ")}</small> : null}
                     </div>
-                    {!hasCandidateDestination(candidate, config) || !candidate.canDownload ? (
-                      <small className="candidate-warning">{downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}</small>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => void download(candidate)}
-                      disabled={busy || !hasCandidateDestination(candidate, config) || !candidate.canDownload}
-                      title={downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}
-                    >
-                      {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
-                    </button>
+                    <div className="candidate-actions">
+                      {!hasCandidateDestination(candidate, config) || !candidate.canDownload ? (
+                        <small className="candidate-warning">{downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}</small>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void download(candidate)}
+                        disabled={busy || !hasCandidateDestination(candidate, config) || !candidate.canDownload}
+                        title={downloadDisabledReason(candidate, hasCandidateDestination(candidate, config))}
+                      >
+                        {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -726,7 +728,7 @@ function App() {
                 </div>
               </section>
 
-              <section className="panel installed-panel">
+              <section className={`panel installed-panel scope-${installedScope}`}>
                 <div className="panel-heading">
                   <h2>Installed</h2>
                   <StatusBadge tone="blue">{visibleInstalled.length}/{installed.length}</StatusBadge>
