@@ -75,6 +75,7 @@ export function createRomDeckServer() {
           arch: arch(),
           node: process.version,
           appDataDirectory: appDataDirectory(),
+          logFile: process.env.ROMDECK_HOST_LOG_FILE,
           sessionProtected: Boolean(process.env.ROMDECK_SESSION_TOKEN)
         }
       });

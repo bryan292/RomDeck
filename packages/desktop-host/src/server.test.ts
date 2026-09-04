@@ -22,6 +22,7 @@ beforeAll(async () => {
 afterEach(async () => {
   vi.unstubAllGlobals();
   delete process.env.ROMDECK_SESSION_TOKEN;
+  delete process.env.ROMDECK_HOST_LOG_FILE;
   await Promise.all(servers.map((server) => closeServer(server)));
   servers.length = 0;
 });
@@ -65,9 +66,10 @@ describe("desktop host HTTP API", () => {
 
   it("reports protected host diagnostics", async () => {
     process.env.ROMDECK_SESSION_TOKEN = "test-token";
+    process.env.ROMDECK_HOST_LOG_FILE = join(configDir, "romdeck-host.log");
     const server = await listen();
 
-    const response = await getJson<{ diagnostics: { host: string; sessionProtected: boolean; appDataDirectory: string } }>(
+    const response = await getJson<{ diagnostics: { host: string; sessionProtected: boolean; appDataDirectory: string; logFile?: string } }>(
       server,
       "/api/diagnostics",
       { "x-romdeck-session": "test-token" }
@@ -77,6 +79,7 @@ describe("desktop host HTTP API", () => {
     expect(response.body.diagnostics.host).toBe("desktop-node");
     expect(response.body.diagnostics.sessionProtected).toBe(true);
     expect(response.body.diagnostics.appDataDirectory).toBe(configDir);
+    expect(response.body.diagnostics.logFile).toBe(join(configDir, "romdeck-host.log"));
   });
 
   it("rejects downloads with unavailable destinations before provider fetch", async () => {

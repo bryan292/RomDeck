@@ -210,5 +210,6 @@ export interface HostDiagnostics {
   arch: string;
   node: string;
   appDataDirectory: string;
+  logFile?: string;
   sessionProtected: boolean;
 }

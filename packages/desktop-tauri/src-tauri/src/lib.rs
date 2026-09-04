@@ -118,6 +118,7 @@ fn start_desktop_host(app: &mut tauri::App) {
         .stdin(Stdio::null());
 
     if let Some(log_file) = host_log_file() {
+        command.env("ROMDECK_HOST_LOG_FILE", &log_file);
         match File::create(&log_file) {
             Ok(stdout) => match stdout.try_clone() {
                 Ok(stderr) => {

@@ -667,6 +667,7 @@ function App() {
                     <span>{diagnostics.platform} {diagnostics.arch}</span>
                     <span>{diagnostics.node}</span>
                     <span>{diagnostics.sessionProtected ? "Protected" : "Dev open"}</span>
+                    {diagnostics.logFile ? <span>{diagnostics.logFile}</span> : null}
                   </div>
                 ) : null}
                 <div className="folder-form">
