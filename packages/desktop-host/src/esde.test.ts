@@ -8,8 +8,8 @@ describe("ES-DE folder detection", () => {
   it("builds common ROM roots from a home directory", () => {
     const roots = commonEsdeRomRoots("/home/tester");
 
-    expect(roots).toContain("/home/tester/ES-DE/ROMs");
-    expect(roots).toContain("/home/tester/Emulation/roms");
+    expect(roots).toContain(join("/home/tester", "ES-DE", "ROMs"));
+    expect(roots).toContain(join("/home/tester", "Emulation", "roms"));
   });
 
   it("suggests exact system folders when they exist", async () => {
