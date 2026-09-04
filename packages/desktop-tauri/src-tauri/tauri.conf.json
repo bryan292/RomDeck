@@ -26,13 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "deb",
-      "rpm"
-    ],
+    "targets": "all",
     "category": "Utility",
     "shortDescription": "Local-first ROM library manager",
     "longDescription": "RomDeck manages local EmulationStation and ES-DE ROM library folders.",

@@ -87,4 +87,6 @@ jobs:
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.rpm
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.msi
             packages/desktop-tauri/src-tauri/target/**/release/bundle/**/*.exe
+            packages/desktop-tauri/src-tauri/target/**/release/romdeck
+            packages/desktop-tauri/src-tauri/target/**/release/romdeck.exe
           if-no-files-found: error
