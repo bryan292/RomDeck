@@ -86,6 +86,12 @@ jobs:
           projectPath: packages/desktop-tauri
           args: ${{ matrix.args }}
 
+      - name: Smoke Packaged Host Resources
+        env:
+          ROMDECK_NODE_PLATFORM: ${{ matrix.node-platform }}
+          ROMDECK_NODE_ARCH: ${{ matrix.node-arch }}
+        run: npm run smoke:tauri-host
+
       - name: Upload Bundle Artifacts
         uses: actions/upload-artifact@v7.0.1
         with:

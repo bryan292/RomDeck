@@ -188,6 +188,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Smoke Packaged Host Resources
+        env:
+          ROMDECK_NODE_PLATFORM: ${{ matrix.node-platform }}
+          ROMDECK_NODE_ARCH: ${{ matrix.node-arch }}
+        run: |
+          npm run build
+          npm run prepare:tauri-host
+          npm run smoke:tauri-host
+
       - name: Publish Tauri Release Assets
         uses: tauri-apps/tauri-action@v1
         env:
