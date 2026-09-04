@@ -6,6 +6,8 @@ dist-types/
 .DS_Store
 *.log
 *.tsbuildinfo
+test-results/
+playwright-report/
 specs/
 packages/desktop-tauri/src-tauri/target/
 packages/desktop-tauri/src-tauri/resources/host/node-runtime/
