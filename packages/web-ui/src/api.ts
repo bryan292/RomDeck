@@ -103,6 +103,13 @@ export function saveConfig(config: AppConfig) {
   });
 }
 
+export function saveSystemDestination(systemKey: SystemKey, destinationUri: string) {
+  return request<{ config: AppConfig }>(`/api/config/systems/${encodeURIComponent(systemKey)}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled: true, destinationUri })
+  });
+}
+
 export function pathToUri(path: string) {
   return request<{ destinationUri: string }>("/api/path-uri", {
     method: "POST",

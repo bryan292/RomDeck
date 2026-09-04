@@ -51,6 +51,18 @@ test("minimum desktop viewport keeps candidate and installed panels readable", a
   expect(firstRowBox!.y - listBox!.y).toBeLessThan(18);
 });
 
+test("saving a destination for another system keeps existing system destinations", async ({ page }) => {
+  await mockRomDeckApi(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Nintendo 64/i }).click();
+  await page.locator(".folder-form input").fill("/Users/test/ES-DE/ROMs/n64");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.getByText("Nintendo 64 folder saved.")).toBeVisible();
+  await expect(page.locator(".system-list .status-badge", { hasText: "Ready" })).toHaveCount(2);
+});
+
 async function openResolvedCandidate(page: Page) {
   await page.goto("/");
 
@@ -83,6 +95,16 @@ function isContainedBy(inner: Rect, outer: Rect): boolean {
 }
 
 async function mockRomDeckApi(page: Page) {
+  const config = {
+    version: 1,
+    systems: {
+      gba: {
+        enabled: true,
+        destinationUri: "file:///Users/test/ES-DE/ROMs/gba"
+      }
+    } as Record<string, { enabled: boolean; destinationUri: string }>
+  };
+
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -113,17 +135,18 @@ async function mockRomDeckApi(page: Page) {
     }
 
     if (path === "/api/config") {
-      await fulfillJson(route, {
-        config: {
-          version: 1,
-          systems: {
-            gba: {
-              enabled: true,
-              destinationUri: "file:///Users/test/ES-DE/ROMs/gba"
-            }
-          }
-        }
-      });
+      await fulfillJson(route, { config });
+      return;
+    }
+
+    const systemConfigMatch = path.match(/^\/api\/config\/systems\/([^/]+)$/);
+    if (systemConfigMatch) {
+      const body = request.postDataJSON() as { enabled?: boolean; destinationUri: string };
+      config.systems[decodeURIComponent(systemConfigMatch[1])] = {
+        enabled: body.enabled ?? true,
+        destinationUri: body.destinationUri
+      };
+      await fulfillJson(route, { config });
       return;
     }
 
@@ -158,7 +181,20 @@ async function mockRomDeckApi(page: Page) {
     }
 
     if (path === "/api/file-path") {
-      await fulfillJson(route, { path: "/Users/test/ES-DE/ROMs/gba" });
+      const body = request.postDataJSON() as { destinationUri: string };
+      await fulfillJson(route, { path: body.destinationUri.replace("file://", "") });
+      return;
+    }
+
+    if (path === "/api/path-uri") {
+      const body = request.postDataJSON() as { path: string };
+      await fulfillJson(route, { destinationUri: `file://${body.path}` });
+      return;
+    }
+
+    if (path === "/api/folders/validate") {
+      const body = request.postDataJSON() as { destinationUri?: string; path?: string };
+      await fulfillJson(route, { ok: true, destinationUri: body.destinationUri ?? `file://${body.path}` });
       return;
     }
 

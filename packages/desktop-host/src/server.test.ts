@@ -1,7 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DownloadCandidate } from "@romdeck/core";
 import type { Server } from "node:http";
 
@@ -16,6 +16,10 @@ const { pathToFileUri } = await import("./files.js");
 const servers: Server[] = [];
 
 beforeAll(async () => {
+  await saveConfig({ version: 1, systems: {} });
+});
+
+beforeEach(async () => {
   await saveConfig({ version: 1, systems: {} });
 });
 
@@ -142,6 +146,39 @@ describe("desktop host HTTP API", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain("Unsupported systemKey");
+  });
+
+  it("saves one system destination without dropping existing system destinations", async () => {
+    const server = await listen();
+    const gbaPath = join(configDir, "merge-config", "gba");
+    const n64Path = join(configDir, "merge-config", "n64");
+    await Promise.all([
+      mkdir(gbaPath, { recursive: true }),
+      mkdir(n64Path, { recursive: true })
+    ]);
+
+    await saveConfig({
+      version: 1,
+      systems: {
+        gba: {
+          enabled: true,
+          destinationUri: pathToFileUri(gbaPath)
+        }
+      }
+    });
+
+    const response = await putJson<{ config: { systems: Record<string, { destinationUri: string }> } }>(
+      server,
+      "/api/config/systems/n64",
+      {
+        enabled: true,
+        destinationUri: pathToFileUri(n64Path)
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.config.systems.gba.destinationUri).toBe(pathToFileUri(gbaPath));
+    expect(response.body.config.systems.n64.destinationUri).toBe(pathToFileUri(n64Path));
   });
 });
 

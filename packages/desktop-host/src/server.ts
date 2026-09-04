@@ -104,6 +104,39 @@ export function createRomDeckServer() {
       return;
     }
 
+    const systemConfigMatch = url.pathname.match(/^\/api\/config\/systems\/([^/]+)$/);
+    if (systemConfigMatch && request.method === "PUT") {
+      const systemKey = decodeURIComponent(systemConfigMatch[1]);
+      if (!isSystemKey(systemKey)) {
+        sendError(response, 400, "Unsupported systemKey.");
+        return;
+      }
+      const body = await readJson<{ enabled?: boolean; destinationUri?: string }>(request);
+      if (typeof body.destinationUri !== "string" || !body.destinationUri) {
+        sendError(response, 400, "destinationUri is required");
+        return;
+      }
+      try {
+        await validateWritableDirectory(body.destinationUri);
+      } catch (error) {
+        sendError(response, 400, error);
+        return;
+      }
+      const current = await loadConfig();
+      const saved = await saveConfig({
+        version: 1,
+        systems: {
+          ...current.systems,
+          [systemKey]: {
+            enabled: body.enabled ?? true,
+            destinationUri: body.destinationUri
+          }
+        }
+      });
+      sendJson(response, 200, { config: saved });
+      return;
+    }
+
     if (url.pathname === "/api/path-uri" && request.method === "POST") {
       const body = await readJson<{ path: string }>(request);
       sendJson(response, 200, { destinationUri: pathToFileUri(body.path) });

@@ -16,6 +16,7 @@ import {
   pickDirectoryPath,
   resolveItem,
   saveConfig,
+  saveSystemDestination,
   scanLibrary,
   searchArchive,
   startDownload,
@@ -217,17 +218,7 @@ function App() {
     try {
       const uri = await pathToUri(folderPath.trim());
       await validateFolder(uri.destinationUri);
-      const nextConfig: AppConfig = {
-        version: 1,
-        systems: {
-          ...config.systems,
-          [selectedSystem]: {
-            enabled: true,
-            destinationUri: uri.destinationUri
-          }
-        }
-      };
-      const saved = await saveConfig(nextConfig);
+      const saved = await saveSystemDestination(selectedSystem, uri.destinationUri);
       setConfig(saved.config);
       setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`, "success");
     } catch (error) {
@@ -250,17 +241,7 @@ function App() {
       setFolderPath(path);
       const uri = await pathToUri(path);
       await validateFolder(uri.destinationUri);
-      const nextConfig: AppConfig = {
-        version: 1,
-        systems: {
-          ...config.systems,
-          [selectedSystem]: {
-            enabled: true,
-            destinationUri: uri.destinationUri
-          }
-        }
-      };
-      const saved = await saveConfig(nextConfig);
+      const saved = await saveSystemDestination(selectedSystem, uri.destinationUri);
       setConfig(saved.config);
       setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`, "success");
     } catch (error) {
@@ -276,17 +257,7 @@ function App() {
     setOperation("saving");
     try {
       await validateFolder(destinationUri);
-      const nextConfig: AppConfig = {
-        version: 1,
-        systems: {
-          ...config.systems,
-          [selectedSystem]: {
-            enabled: true,
-            destinationUri
-          }
-        }
-      };
-      const saved = await saveConfig(nextConfig);
+      const saved = await saveSystemDestination(selectedSystem, destinationUri);
       setConfig(saved.config);
       setNotice(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved from ${label}.`, "success");
     } catch (error) {
