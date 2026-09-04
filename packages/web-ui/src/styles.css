@@ -447,7 +447,7 @@ small {
 
 .panel-heading button,
 .download-row-foot button,
-.suggestions-row > button,
+.suggestion-actions button,
 .suggestion-list button {
   min-height: 30px;
   padding: 0 10px;
@@ -512,6 +512,10 @@ small {
   overflow-wrap: anywhere;
 }
 
+.candidate-warning {
+  color: #ffd875;
+}
+
 .candidate-title-row strong {
   overflow: hidden;
   color: #ffffff;
@@ -534,6 +538,12 @@ small {
   display: grid;
   gap: 8px;
   margin-top: 8px;
+}
+
+.suggestion-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .suggestion-list button {

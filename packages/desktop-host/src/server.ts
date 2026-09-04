@@ -12,7 +12,7 @@ import {
 } from "@romdeck/core";
 import { loadConfig, saveConfig } from "./config.js";
 import { cancelDownload, clearDownloadHistory, enqueueDownload, initializeDownloadHistory, listDownloadJobs, onDownloadComplete } from "./downloadManager.js";
-import { listDirectoryFiles, pathToFileUri, validateWritableDirectory } from "./files.js";
+import { fileUriToPath, listDirectoryFiles, pathToFileUri, validateWritableDirectory } from "./files.js";
 import { fetchInternetArchiveFiles, searchInternetArchive } from "./internetArchive.js";
 import { enrichArchiveCandidates } from "./archiveInspector.js";
 import { readJson, sendError, sendJson, serveStatic } from "./http.js";
@@ -79,6 +79,16 @@ const server = createServer(async (request, response) => {
     if (url.pathname === "/api/path-uri" && request.method === "POST") {
       const body = await readJson<{ path: string }>(request);
       sendJson(response, 200, { destinationUri: pathToFileUri(body.path) });
+      return;
+    }
+
+    if (url.pathname === "/api/file-path" && request.method === "POST") {
+      const body = await readJson<{ destinationUri: string }>(request);
+      if (!body.destinationUri) {
+        sendError(response, 400, "destinationUri is required");
+        return;
+      }
+      sendJson(response, 200, { path: fileUriToPath(body.destinationUri) });
       return;
     }
 

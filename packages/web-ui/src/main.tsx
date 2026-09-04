@@ -17,6 +17,7 @@ import {
   scanLibrary,
   searchArchive,
   startDownload,
+  uriToPath,
   validateFolder,
   type DownloadJob,
   type EsdeFolderSuggestion
@@ -36,6 +37,7 @@ function App() {
   const [completedDownloadIds, setCompletedDownloadIds] = useState<Set<string>>(new Set());
   const [selectedSystem, setSelectedSystem] = useState("gba");
   const [folderPath, setFolderPath] = useState("");
+  const [destinationPath, setDestinationPath] = useState("");
   const [query, setQuery] = useState("Metroid Fusion");
   const [results, setResults] = useState<SearchResultWithState[]>([]);
   const [selectedResult, setSelectedResult] = useState<SearchResultWithState | null>(null);
@@ -49,6 +51,7 @@ function App() {
   const selectedSystemRef = useRef(selectedSystem);
   const searchRequestRef = useRef(0);
   const resolveRequestRef = useRef(0);
+  const destinationPathRequestRef = useRef(0);
   const nativeDialogsAvailable = canUseNativeDialogs();
 
   const selectedSystemConfig = config.systems[selectedSystem as keyof AppConfig["systems"]];
@@ -60,6 +63,15 @@ function App() {
     () => esdeSuggestions.filter((suggestion) => suggestion.systemKey === selectedSystem),
     [esdeSuggestions, selectedSystem]
   );
+  const exactEsdeSuggestions = useMemo(() => {
+    const unique = new Map<string, EsdeFolderSuggestion>();
+    for (const suggestion of esdeSuggestions) {
+      if (suggestion.confidence === "exact" && !unique.has(suggestion.systemKey)) {
+        unique.set(suggestion.systemKey, suggestion);
+      }
+    }
+    return [...unique.values()];
+  }, [esdeSuggestions]);
   const configuredSystemCount = useMemo(
     () => systems.filter((system) => config.systems[system.key]?.destinationUri).length,
     [config.systems, systems]
@@ -95,6 +107,10 @@ function App() {
   useEffect(() => {
     selectedSystemRef.current = selectedSystem;
   }, [selectedSystem]);
+
+  useEffect(() => {
+    void refreshDestinationPath();
+  }, [selectedSystem, selectedSystemConfig?.destinationUri]);
 
   async function initialize() {
     setOperation("initializing");
@@ -232,6 +248,34 @@ function App() {
     }
   }
 
+  async function applyExactEsdeSuggestions() {
+    if (exactEsdeSuggestions.length === 0) {
+      setNotice("No exact ES-DE folders to apply.", "warning");
+      return;
+    }
+
+    setBusy(true);
+    setOperation("saving");
+    try {
+      const nextSystems = { ...config.systems };
+      for (const suggestion of exactEsdeSuggestions) {
+        await validateFolder(suggestion.destinationUri);
+        nextSystems[suggestion.systemKey] = {
+          enabled: true,
+          destinationUri: suggestion.destinationUri
+        };
+      }
+      const saved = await saveConfig({ version: 1, systems: nextSystems });
+      setConfig(saved.config);
+      setNotice(`Applied ${exactEsdeSuggestions.length} ES-DE folder${exactEsdeSuggestions.length === 1 ? "" : "s"}.`, "success");
+    } catch (error) {
+      setNotice(messageFromError(error), "error");
+    } finally {
+      setOperation("idle");
+      setBusy(false);
+    }
+  }
+
   async function detectEsdeFolders() {
     setBusy(true);
     setOperation("detecting");
@@ -360,6 +404,31 @@ function App() {
   function setNotice(message: string, tone: NoticeTone): void {
     setStatus(message);
     setStatusTone(tone);
+  }
+
+  async function refreshDestinationPath() {
+    const requestId = destinationPathRequestRef.current + 1;
+    destinationPathRequestRef.current = requestId;
+    const destinationUri = selectedSystemConfig?.destinationUri;
+    if (!destinationUri) {
+      setDestinationPath("");
+      setFolderPath("");
+      return;
+    }
+    try {
+      const response = await uriToPath(destinationUri);
+      if (destinationPathRequestRef.current !== requestId) {
+        return;
+      }
+      setDestinationPath(response.path);
+      setFolderPath(response.path);
+    } catch {
+      if (destinationPathRequestRef.current !== requestId) {
+        return;
+      }
+      setDestinationPath(destinationUri);
+      setFolderPath(destinationUri);
+    }
   }
 
   return (
@@ -505,10 +574,14 @@ function App() {
                       ) : null}
                       {candidate.warnings.length > 0 ? <small>{candidate.warnings.join(" ")}</small> : null}
                     </div>
+                    {!selectedSystemConfig?.destinationUri || !candidate.canDownload ? (
+                      <small className="candidate-warning">{downloadDisabledReason(candidate, Boolean(selectedSystemConfig?.destinationUri))}</small>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void download(candidate)}
                       disabled={busy || !selectedSystemConfig?.destinationUri || !candidate.canDownload}
+                      title={downloadDisabledReason(candidate, Boolean(selectedSystemConfig?.destinationUri))}
                     >
                       {!candidate.canDownload ? "Unavailable" : candidate.requiresExtraction ? "Download + Extract" : "Download"}
                     </button>
@@ -525,7 +598,7 @@ function App() {
                     {selectedSystemConfig?.destinationUri ? "Ready" : "Required"}
                   </StatusBadge>
                 </div>
-                <p className="path-readout">{selectedSystemConfig?.destinationUri ?? "No destination configured"}</p>
+                <p className="path-readout">{destinationPath || selectedSystemConfig?.destinationUri || "No destination configured"}</p>
                 <div className="folder-form">
                   <input
                     value={folderPath}
@@ -545,9 +618,14 @@ function App() {
                   </button>
                 </div>
                 <div className="suggestions-row">
-                  <button type="button" onClick={detectEsdeFolders} disabled={busy}>
-                    Detect ES-DE
-                  </button>
+                  <div className="suggestion-actions">
+                    <button type="button" onClick={detectEsdeFolders} disabled={busy}>
+                      Detect ES-DE
+                    </button>
+                    <button type="button" onClick={() => void applyExactEsdeSuggestions()} disabled={busy || exactEsdeSuggestions.length === 0}>
+                      Apply Exact{exactEsdeSuggestions.length > 0 ? ` (${exactEsdeSuggestions.length})` : ""}
+                    </button>
+                  </div>
                   <div className="suggestion-list">
                     {selectedEsdeSuggestions.map((suggestion) => (
                       <button
@@ -757,6 +835,16 @@ function downloadDetail(job: DownloadJob): string {
     return `Extracted ${formatBytes(job.extractedBytes)}`;
   }
   return job.currentFile ?? "Waiting";
+}
+
+function downloadDisabledReason(candidate: DownloadCandidate, hasDestination: boolean): string {
+  if (!hasDestination) {
+    return "Configure this system folder first.";
+  }
+  if (!candidate.canDownload) {
+    return candidate.warnings[0] ?? "Candidate is unavailable.";
+  }
+  return "Download";
 }
 
 function downloadProgress(job: DownloadJob): number {

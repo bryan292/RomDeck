@@ -1,4 +1,4 @@
-import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition } from "@romdeck/core";
+import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition, SystemKey } from "@romdeck/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 declare global {
@@ -94,6 +94,13 @@ export function pathToUri(path: string) {
   });
 }
 
+export function uriToPath(destinationUri: string) {
+  return request<{ path: string }>("/api/file-path", {
+    method: "POST",
+    body: JSON.stringify({ destinationUri })
+  });
+}
+
 export async function pickDirectoryPath(title = "Choose ROM folder"): Promise<string | null> {
   if (!canUseNativeDialogs()) {
     return null;
@@ -173,7 +180,7 @@ export interface DownloadJob {
 }
 
 export interface EsdeFolderSuggestion {
-  systemKey: string;
+  systemKey: SystemKey;
   systemName: string;
   path: string;
   destinationUri: string;
