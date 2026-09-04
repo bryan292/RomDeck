@@ -1,8 +1,49 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 test("configure, search, resolve, and show installed library state", async ({ page }) => {
   await mockRomDeckApi(page);
 
+  await openResolvedCandidate(page);
+
+  await expect(page.getByRole("heading", { name: "Metroid Fusion" })).toBeVisible();
+  await expect(page.getByText("Metroid Fusion (USA).gba")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toBeEnabled();
+});
+
+test("minimum desktop viewport keeps candidate and installed panels readable", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 });
+  await mockRomDeckApi(page);
+  await openResolvedCandidate(page);
+
+  await page.getByRole("button", { name: "All", exact: true }).click();
+
+  const viewport = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth
+  }));
+  expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth + 1);
+
+  const candidateDetails = await page.locator(".candidate > div").first().boundingBox();
+  const candidateActions = await page.locator(".candidate-actions").first().boundingBox();
+  expect(candidateDetails).not.toBeNull();
+  expect(candidateActions).not.toBeNull();
+  expect(rectanglesOverlap(candidateDetails!, candidateActions!)).toBe(false);
+
+  const listBox = await page.locator(".compact-list").boundingBox();
+  const firstRowBox = await page.locator(".installed-row").first().boundingBox();
+  expect(listBox).not.toBeNull();
+  expect(firstRowBox).not.toBeNull();
+  expect(firstRowBox!.y - listBox!.y).toBeLessThan(18);
+});
+
+async function openResolvedCandidate(page: Page) {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "RomDeck" })).toBeVisible();
@@ -17,13 +58,16 @@ test("configure, search, resolve, and show installed library state", async ({ pa
 
   await expect(page.getByRole("button", { name: /Metroid Fusion/i })).toBeVisible();
   await page.getByRole("button", { name: /Metroid Fusion/i }).click();
+}
 
-  await expect(page.getByRole("heading", { name: "Metroid Fusion" })).toBeVisible();
-  await expect(page.getByText("Metroid Fusion (USA).gba")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toBeEnabled();
-});
+function rectanglesOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y;
+}
 
-async function mockRomDeckApi(page: { route: typeof import("@playwright/test").Page.prototype.route }) {
+async function mockRomDeckApi(page: Page) {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
