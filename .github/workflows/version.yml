@@ -9,12 +9,11 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   prepare-version:
-    name: Prepare Version Files
+    name: Prepare Version Patch
     runs-on: ubuntu-24.04
 
     steps:
@@ -43,14 +42,14 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Create Version Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: release/v${{ inputs.version }}
-          title: Prepare RomDeck v${{ inputs.version }}
-          commit-message: Prepare RomDeck v${{ inputs.version }}
-          body: |
-            Prepares version files for RomDeck v${{ inputs.version }}.
+      - name: Create Version Patch
+        run: |
+          git diff --binary > "romdeck-v${{ inputs.version }}.patch"
+          git status --short
 
-            After this PR is merged, create and push tag `v${{ inputs.version }}` to trigger the release workflow.
-          labels: release
+      - name: Upload Version Patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: romdeck-v${{ inputs.version }}-version-patch
+          path: romdeck-v${{ inputs.version }}.patch
+          if-no-files-found: error
