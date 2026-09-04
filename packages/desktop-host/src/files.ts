@@ -1,7 +1,7 @@
 import { createWriteStream } from "node:fs";
 import { access, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { LocalFileEntry } from "@romdeck/core";
 
@@ -69,7 +69,7 @@ async function collectFiles(root: string, current: string, files: LocalFileEntry
     const info = await stat(fullPath);
     files.push({
       name: entry.name,
-      relativePath: relative(root, fullPath),
+      relativePath: relative(root, fullPath).split(sep).join("/"),
       size: info.size,
       modifiedAt: info.mtime.toISOString()
     });

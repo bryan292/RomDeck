@@ -12,7 +12,7 @@
     "build": "npm run build -w @romdeck/core && npm run build -w @romdeck/web-ui && npm run build -w @romdeck/desktop-host",
     "prepare:tauri-host": "node scripts/prepare-tauri-host.mjs",
     "build:tauri": "npm run build -w @romdeck/desktop-tauri",
-    "test": "npm run test -w @romdeck/core && npm run test -w @romdeck/desktop-host",
+    "test": "npm run build -w @romdeck/core && npm run test -w @romdeck/core && npm run test -w @romdeck/desktop-host",
     "typecheck": "npm run build -w @romdeck/core && npm run typecheck -w @romdeck/desktop-host && npm run typecheck -w @romdeck/web-ui && npm run typecheck -w @romdeck/desktop-tauri"
   },
   "devDependencies": {
