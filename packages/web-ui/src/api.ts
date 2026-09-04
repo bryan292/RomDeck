@@ -1,4 +1,5 @@
 import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition } from "@romdeck/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 declare global {
   interface Window {
@@ -9,6 +10,13 @@ declare global {
 const API_BASE = defaultApiBase();
 const REQUEST_RETRIES = API_BASE ? 30 : 0;
 const REQUEST_RETRY_DELAY_MS = 350;
+
+export function canUseNativeDialogs(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return Boolean(window.__TAURI_INTERNALS__) || !["http:", "https:"].includes(window.location.protocol);
+}
 
 function defaultApiBase(): string {
   if (typeof window === "undefined") {
@@ -84,6 +92,14 @@ export function pathToUri(path: string) {
     method: "POST",
     body: JSON.stringify({ path })
   });
+}
+
+export async function pickDirectoryPath(title = "Choose ROM folder"): Promise<string | null> {
+  if (!canUseNativeDialogs()) {
+    return null;
+  }
+  const selected = await open({ directory: true, multiple: false, title });
+  return typeof selected === "string" ? selected : null;
 }
 
 export function validateFolder(destinationUri: string) {

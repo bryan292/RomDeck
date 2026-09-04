@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppConfig, DownloadCandidate, InstalledGame, InstalledState, SearchResult, SystemDefinition } from "@romdeck/core";
 import {
+  canUseNativeDialogs,
   cancelDownload,
   clearDownloadHistory,
   getConfig,
@@ -10,6 +11,7 @@ import {
   getLibrary,
   getSystems,
   pathToUri,
+  pickDirectoryPath,
   resolveItem,
   saveConfig,
   scanLibrary,
@@ -41,6 +43,7 @@ function App() {
   const completedDownloadIdsRef = useRef(completedDownloadIds);
   const queryRef = useRef(query);
   const selectedSystemRef = useRef(selectedSystem);
+  const nativeDialogsAvailable = canUseNativeDialogs();
 
   const selectedSystemConfig = config.systems[selectedSystem as keyof AppConfig["systems"]];
   const selectedSystemInfo = useMemo(
@@ -135,6 +138,37 @@ function App() {
     setBusy(true);
     try {
       const uri = await pathToUri(folderPath.trim());
+      await validateFolder(uri.destinationUri);
+      const nextConfig: AppConfig = {
+        version: 1,
+        systems: {
+          ...config.systems,
+          [selectedSystem]: {
+            enabled: true,
+            destinationUri: uri.destinationUri
+          }
+        }
+      };
+      const saved = await saveConfig(nextConfig);
+      setConfig(saved.config);
+      setStatus(`${selectedSystemInfo?.displayName ?? selectedSystem} folder saved.`);
+    } catch (error) {
+      setStatus(messageFromError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function chooseFolder() {
+    setBusy(true);
+    try {
+      const path = await pickDirectoryPath(`Choose ${selectedSystemInfo?.displayName ?? selectedSystem} ROM folder`);
+      if (!path) {
+        setStatus("Folder selection canceled.");
+        return;
+      }
+      setFolderPath(path);
+      const uri = await pathToUri(path);
       await validateFolder(uri.destinationUri);
       const nextConfig: AppConfig = {
         version: 1,
@@ -436,6 +470,14 @@ function App() {
                     onChange={(event) => setFolderPath(event.target.value)}
                     placeholder="/home/user/Emulation/roms/gba"
                   />
+                  <button
+                    type="button"
+                    onClick={() => void chooseFolder()}
+                    disabled={busy || !nativeDialogsAvailable}
+                    title={nativeDialogsAvailable ? "Choose folder" : "Available in the desktop app"}
+                  >
+                    Browse
+                  </button>
                   <button type="button" onClick={configureFolder} disabled={busy}>
                     Save
                   </button>
@@ -492,6 +534,14 @@ function App() {
                       <StatusBadge tone="blue">{game.systemKey.toUpperCase()}</StatusBadge>
                     </div>
                   ))}
+                  {installed.length > 8 ? (
+                    <div className="installed-row installed-summary">
+                      <span>
+                        <strong>{installed.length - 8} more installed</strong>
+                        <small>Use scan/search to refresh matches.</small>
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </section>
             </aside>

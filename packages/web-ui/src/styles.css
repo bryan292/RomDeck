@@ -326,8 +326,15 @@ small {
 .search-row,
 .folder-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+}
+
+.search-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.folder-form {
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .search-row input,
@@ -509,6 +516,10 @@ small {
   gap: 10px;
 }
 
+.installed-summary {
+  color: #9fc0e4;
+}
+
 .download-row {
   display: grid;
   gap: 9px;
@@ -680,7 +691,8 @@ small {
   }
 
   .candidate,
-  .download-row-foot {
+  .download-row-foot,
+  .folder-form {
     grid-template-columns: 1fr;
   }
 }

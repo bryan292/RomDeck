@@ -55,6 +55,7 @@ pub fn run() {
         });
 
     builder
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             #[cfg(not(mobile))]
             start_desktop_host(app);
