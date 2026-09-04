@@ -9,21 +9,44 @@ declare global {
 const API_BASE = typeof window !== "undefined" && window.__TAURI_INTERNALS__
   ? "http://127.0.0.1:5137"
   : "";
+const REQUEST_RETRIES = API_BASE ? 12 : 0;
+const REQUEST_RETRY_DELAY_MS = 350;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "content-type": "application/json",
-      ...options?.headers
-    }
-  });
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= REQUEST_RETRIES; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          ...options?.headers
+        }
+      });
 
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.error ?? "Request failed.");
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Request failed.");
+      }
+      return body as T;
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetryRequest(error, attempt, options?.method)) {
+        break;
+      }
+      await delay(REQUEST_RETRY_DELAY_MS);
+    }
   }
-  return body as T;
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function shouldRetryRequest(error: unknown, attempt: number, method?: string): boolean {
+  const safeMethod = !method || method === "GET";
+  return safeMethod && attempt < REQUEST_RETRIES && error instanceof TypeError;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 export function getSystems() {

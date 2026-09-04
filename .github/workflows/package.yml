@@ -22,21 +22,29 @@ jobs:
             args: --target aarch64-apple-darwin
             rust-targets: aarch64-apple-darwin
             artifact: macos-aarch64
+            node-platform: darwin
+            node-arch: arm64
           - label: macOS Intel
             platform: macos-latest
             args: --target x86_64-apple-darwin
             rust-targets: x86_64-apple-darwin
             artifact: macos-x64
+            node-platform: darwin
+            node-arch: x64
           - label: Linux x64
             platform: ubuntu-24.04
             args: ""
             rust-targets: ""
             artifact: linux-x64
+            node-platform: linux
+            node-arch: x64
           - label: Windows x64
             platform: windows-latest
             args: ""
             rust-targets: ""
             artifact: windows-x64
+            node-platform: win
+            node-arch: x64
 
     runs-on: ${{ matrix.platform }}
 
@@ -53,7 +61,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Setup Rust
@@ -71,6 +79,9 @@ jobs:
 
       - name: Build Tauri Bundle
         uses: tauri-apps/tauri-action@v1
+        env:
+          ROMDECK_NODE_PLATFORM: ${{ matrix.node-platform }}
+          ROMDECK_NODE_ARCH: ${{ matrix.node-arch }}
         with:
           projectPath: packages/desktop-tauri
           args: ${{ matrix.args }}

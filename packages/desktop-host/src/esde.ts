@@ -16,10 +16,16 @@ export interface EsdeFolderSuggestion {
 export interface EsdeDetectionOptions {
   homeDirectory?: string;
   candidateRoots?: string[];
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
 }
 
 export async function detectEsdeFolderSuggestions(options: EsdeDetectionOptions = {}): Promise<EsdeFolderSuggestion[]> {
-  const roots = options.candidateRoots ?? commonEsdeRomRoots(options.homeDirectory ?? homedir());
+  const roots = options.candidateRoots ?? commonEsdeRomRoots({
+    env: options.env ?? process.env,
+    homeDirectory: options.homeDirectory ?? homedir(),
+    platform: options.platform ?? platform()
+  });
   const rootStates = await Promise.all(roots.map(async (root) => ({
     root,
     exists: await isDirectory(root)
@@ -52,7 +58,14 @@ export async function detectEsdeFolderSuggestions(options: EsdeDetectionOptions 
   return suggestions.sort((a, b) => suggestionScore(b) - suggestionScore(a) || a.systemName.localeCompare(b.systemName));
 }
 
-export function commonEsdeRomRoots(homeDirectory: string): string[] {
+export function commonEsdeRomRoots(input: string | {
+  env?: NodeJS.ProcessEnv;
+  homeDirectory: string;
+  platform?: NodeJS.Platform;
+}): string[] {
+  const homeDirectory = typeof input === "string" ? input : input.homeDirectory;
+  const operatingSystem = typeof input === "string" ? platform() : input.platform ?? platform();
+  const env = typeof input === "string" ? process.env : input.env ?? process.env;
   const roots = [
     join(homeDirectory, "ES-DE", "ROMs"),
     join(homeDirectory, "ES-DE", "roms"),
@@ -61,7 +74,42 @@ export function commonEsdeRomRoots(homeDirectory: string): string[] {
     join(homeDirectory, ".emulationstation", "roms")
   ];
 
-  if (platform() === "linux") {
+  if (operatingSystem === "win32") {
+    const documents = env.USERPROFILE ? join(env.USERPROFILE, "Documents") : join(homeDirectory, "Documents");
+    const oneDriveDocuments = env.OneDrive ? join(env.OneDrive, "Documents") : undefined;
+    const appData = env.APPDATA;
+    const systemDrive = env.SystemDrive ?? "C:";
+
+    roots.push(
+      join(documents, "ES-DE", "ROMs"),
+      join(documents, "ES-DE", "roms"),
+      join(documents, "Emulation", "roms"),
+      join(documents, "ROMs"),
+      join(homeDirectory, "Saved Games", "ES-DE", "ROMs"),
+      join(homeDirectory, "Saved Games", "ES-DE", "roms"),
+      join(systemDrive, "ES-DE", "ROMs"),
+      join(systemDrive, "Emulation", "roms"),
+      join(systemDrive, "ROMs")
+    );
+
+    if (oneDriveDocuments) {
+      roots.push(
+        join(oneDriveDocuments, "ES-DE", "ROMs"),
+        join(oneDriveDocuments, "ES-DE", "roms"),
+        join(oneDriveDocuments, "Emulation", "roms"),
+        join(oneDriveDocuments, "ROMs")
+      );
+    }
+
+    if (appData) {
+      roots.push(
+        join(appData, "ES-DE", "ROMs"),
+        join(appData, "ES-DE", "roms")
+      );
+    }
+  }
+
+  if (operatingSystem === "linux") {
     roots.push(
       "/run/media/mmcblk0p1/Emulation/roms",
       "/run/media/deck/mmcblk0p1/Emulation/roms"

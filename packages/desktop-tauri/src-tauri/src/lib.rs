@@ -1,9 +1,13 @@
 #[cfg(not(mobile))]
 use std::{
+    fs::{create_dir_all, File},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
 };
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 #[cfg(not(mobile))]
 #[derive(Default)]
@@ -94,14 +98,37 @@ fn start_desktop_host(app: &mut tauri::App) {
     };
 
     let node_path = node_executable(app);
-    let child = Command::new(&node_path)
-        .arg(server_path)
+    let mut command = Command::new(&node_path);
+    command.arg(server_path)
         .env("PORT", "5137")
         .current_dir(resource_root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+        .stdin(Stdio::null());
+
+    if let Some(log_file) = host_log_file() {
+        match File::create(&log_file) {
+            Ok(stdout) => match stdout.try_clone() {
+                Ok(stderr) => {
+                    command.stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr));
+                }
+                Err(_) => {
+                    command.stdout(Stdio::from(stdout)).stderr(Stdio::null());
+                }
+            },
+            Err(_) => {
+                command.stdout(Stdio::null()).stderr(Stdio::null());
+            }
+        }
+    } else {
+        command.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let child = command.spawn();
 
     match child {
         Ok(child) => {
@@ -138,5 +165,13 @@ fn start_desktop_host(app: &mut tauri::App) {
             }
         }
         PathBuf::from("node")
+    }
+
+    fn host_log_file() -> Option<PathBuf> {
+        let directory = std::env::temp_dir().join("RomDeck");
+        if create_dir_all(&directory).is_err() {
+            return None;
+        }
+        Some(directory.join("romdeck-host.log"))
     }
 }
