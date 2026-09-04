@@ -17,6 +17,7 @@ import { fetchInternetArchiveFiles, searchInternetArchive } from "./internetArch
 import { enrichArchiveCandidates } from "./archiveInspector.js";
 import { readJson, sendError, sendJson, serveStatic } from "./http.js";
 import { detectEsdeFolderSuggestions } from "./esde.js";
+import { logError, logInfo } from "./logger.js";
 
 const PORT = Number(process.env.PORT ?? 5137);
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,9 @@ onDownloadComplete(async () => {
 });
 
 const server = createServer(async (request, response) => {
+  const startedAt = Date.now();
+  const requestPath = request.url ?? "/";
+  let shouldLogRequest = true;
   try {
     response.setHeader("access-control-allow-origin", "*");
     response.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
@@ -41,6 +45,10 @@ const server = createServer(async (request, response) => {
     }
 
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    shouldLogRequest = !(request.method === "GET" && url.pathname === "/api/downloads");
+    if (shouldLogRequest) {
+      logInfo("HTTP request started", { method: request.method, path: url.pathname });
+    }
 
     if (url.pathname === "/api/health") {
       sendJson(response, 200, { ok: true });
@@ -177,14 +185,23 @@ const server = createServer(async (request, response) => {
 
     sendError(response, 404, "Not found");
   } catch (error) {
+    logError("HTTP request failed", error, { method: request.method, path: requestPath });
     sendError(response, 500, error);
+  } finally {
+    if (shouldLogRequest || Date.now() - startedAt > 500) {
+      logInfo("HTTP request completed", {
+        method: request.method,
+        path: requestPath,
+        durationMs: Date.now() - startedAt
+      });
+    }
   }
 });
 
 await initializeDownloadHistory();
 
 server.listen(PORT, () => {
-  console.log(`RomDeck desktop host listening on http://localhost:${PORT}`);
+  logInfo(`RomDeck desktop host listening on http://localhost:${PORT}`);
 });
 
 async function scanConfiguredSystems() {

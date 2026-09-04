@@ -24,6 +24,7 @@ import {
 } from "./files.js";
 import { downloadsFilePath } from "./config.js";
 import { canUseJsWasmArchive, extractJsWasmArchive } from "./libarchiveAdapter.js";
+import { logError, logInfo, logWarn } from "./logger.js";
 
 export interface RuntimeDownloadJob extends Omit<PlannedDownloadJob, "status"> {
   status: "queued" | "downloading" | "extracting" | "complete" | "failed" | "skipped" | "canceled";
@@ -94,6 +95,13 @@ export async function enqueueDownload(candidate: DownloadCandidate, destinationU
     updatedAt: now
   };
   jobs.set(job.id, job);
+  logInfo("Download queued", {
+    jobId: job.id,
+    systemKey: job.systemKey,
+    title: job.title,
+    files: job.files.length,
+    bytesTotal: job.bytesTotal
+  });
   await persistJobs();
   void runJob(job);
   return job;
@@ -136,6 +144,7 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
   const controller = new AbortController();
   controllers.set(job.id, controller);
   try {
+    logInfo("Download started", { jobId: job.id, systemKey: job.systemKey, title: job.title });
     job.status = "downloading";
     touch(job);
     await ensureDirectory(job.destinationUri);
@@ -168,6 +177,12 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
     job.completedAt = new Date().toISOString();
     touch(job);
     await persistJobs();
+    logInfo("Download completed", {
+      jobId: job.id,
+      status: job.status,
+      downloadedBytes: job.downloadedBytes,
+      extractedBytes: job.extractedBytes
+    });
     notifyCompletion(job);
   } catch (error) {
     if (controller.signal.aborted || job.status === "canceled") {
@@ -180,6 +195,12 @@ async function runJob(job: RuntimeDownloadJob): Promise<void> {
     job.completedAt = new Date().toISOString();
     touch(job);
     await persistJobs();
+    logError("Download failed", error, {
+      jobId: job.id,
+      status: job.status,
+      downloadedBytes: job.downloadedBytes,
+      extractedBytes: job.extractedBytes
+    });
   } finally {
     controllers.delete(job.id);
   }
@@ -366,6 +387,7 @@ async function runTransferWithRetries(job: RuntimeDownloadJob, signal: AbortSign
       job.error = `Retrying transfer after ${formatError(error)}.`;
       touch(job);
       await persistJobs();
+      logWarn("Download transfer retrying", { jobId: job.id, attempt, error: formatError(error) });
       await delay(attempt * 750, signal);
     }
   }

@@ -207,9 +207,13 @@ function App() {
   }
 
   async function runSearch() {
+    if (busy || !query.trim()) {
+      return;
+    }
     setBusy(true);
     setSelectedResult(null);
     setCandidates([]);
+    setStatus(`Searching ${selectedSystemInfo?.displayName ?? selectedSystem}...`);
     try {
       const response = await searchArchive(selectedSystem, query);
       setResults(response.results);
@@ -225,6 +229,7 @@ function App() {
     setSelectedResult(result);
     setCandidates([]);
     setBusy(true);
+    setStatus(`Inspecting compatible files for ${result.title}...`);
     try {
       const response = await resolveItem(result.itemId, result.systemKey, result.title);
       setCandidates(response.candidates);
@@ -331,12 +336,15 @@ function App() {
                 ))}
               </div>
             </div>
-            <div className="search-row">
+            <form className="search-row" onSubmit={(event) => {
+              event.preventDefault();
+              void runSearch();
+            }}>
               <input value={query} onChange={(event) => setQuery(event.target.value)} />
-              <button type="button" onClick={runSearch} disabled={busy || !query.trim()}>
+              <button type="submit" disabled={busy || !query.trim()}>
                 Search
               </button>
-            </div>
+            </form>
           </section>
 
           <section className="content-grid">

@@ -1,90 +1,121 @@
 import { unzipSync } from "fflate";
 import { extensionOf, isDirectSystemFile, type ArchiveEntry, type DownloadCandidate, type SystemKey } from "@romdeck/core";
 import { canUseJsWasmArchive, inspectJsWasmArchive, jsWasmArchiveLimitLabel } from "./libarchiveAdapter.js";
+import { logInfo, logWarn } from "./logger.js";
+import { fetchWithRetries } from "./net.js";
 import { parseZipCentralDirectory } from "./zipCentralDirectory.js";
 
 const MAX_INSPECT_BYTES = 64 * 1024 * 1024;
+const MAX_BUFFERED_ARCHIVE_INSPECT_BYTES = 24 * 1024 * 1024;
 const ZIP_TAIL_BYTES = 128 * 1024;
+const MAX_CANDIDATES_TO_ENRICH = 12;
+const ENRICH_CONCURRENCY = 4;
+const enrichedCache = new Map<string, DownloadCandidate[]>();
 
 export async function enrichArchiveCandidates(candidates: DownloadCandidate[]): Promise<DownloadCandidate[]> {
-  const enriched: DownloadCandidate[] = [];
-
-  for (const candidate of candidates) {
-    const archiveExtension = candidate.files.length === 1 ? extensionOf(candidate.files[0].targetName) : "";
-    if (!candidate.requiresExtraction) {
-      enriched.push(candidate);
-      continue;
-    }
-
-    if (archiveExtension !== ".zip") {
-      const label = archiveExtension ? archiveExtension.toUpperCase().slice(1) : "Archive";
-      if ([".7z", ".rar"].includes(archiveExtension) && canUseJsWasmArchive(candidate.files[0].size)) {
-        const inspected = await inspectBufferedArchive(candidate.files[0].sourceUrl, candidate.systemKey);
-        if (inspected.length > 0) {
-          enriched.push({
-            ...candidate,
-            title: titleFromEntry(inspected[0].name, candidate.title),
-            extractedFiles: inspected,
-            fileCount: inspected.length,
-            totalSize: inspected.reduce((sum, entry) => sum + (entry.size ?? 0), 0) || candidate.totalSize,
-            canDownload: true,
-            warnings: [],
-            confidence: Math.min(0.82, candidate.confidence + 0.22),
-            reason: inspected.length === 1
-              ? `${label} contains ${inspected[0].name}`
-              : `${label} contains ${inspected.length} compatible files`
-          });
-          continue;
-        }
-      }
-
-      enriched.push({
-        ...candidate,
-        canDownload: false,
-        warnings: [`${label} extraction uses JS/WASM and is currently limited to ${jsWasmArchiveLimitLabel()}.`],
-        reason: `${label} extraction uses JS/WASM and is currently limited to ${jsWasmArchiveLimitLabel()}.`
-      });
-      continue;
-    }
-
-    const inspected = await inspectZipUrl(candidate.files[0].sourceUrl, candidate.systemKey, candidate.files[0].size);
-    if (!inspected.inspected) {
-      enriched.push({
-        ...candidate,
-        reason: inspected.reason ?? candidate.reason,
-        canDownload: false,
-        warnings: [inspected.reason ?? "Archive could not be inspected before download."]
-      });
-      continue;
-    }
-
-    if (inspected.entries.length === 0) {
-      continue;
-    }
-
-    const inspectedReason = inspected.entries.length === 1
-      ? `ZIP contains ${inspected.entries[0].name}`
-      : `ZIP contains ${inspected.entries.length} compatible files`;
-
-    enriched.push({
-      ...candidate,
-      title: titleFromEntry(inspected.entries[0].name, candidate.title),
-      extractedFiles: inspected.entries,
-      fileCount: inspected.entries.length,
-      totalSize: inspected.entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0) || candidate.totalSize,
-      canDownload: true,
-      warnings: [],
-      confidence: Math.min(0.88, candidate.confidence + 0.25),
-      reason: inspectedReason
-    });
+  const scopedCandidates = candidates.slice(0, MAX_CANDIDATES_TO_ENRICH);
+  const cacheKey = scopedCandidates.map((candidate) => `${candidate.id}:${candidate.totalSize}:${candidate.fileCount}`).join("|");
+  const cached = enrichedCache.get(cacheKey);
+  if (cached) {
+    logInfo("Archive candidate cache hit", { candidates: cached.length });
+    return cached;
   }
 
+  const startedAt = Date.now();
+  logInfo("Archive candidate enrichment started", { candidates: scopedCandidates.length, skipped: Math.max(0, candidates.length - scopedCandidates.length) });
+  const enriched = (await mapWithConcurrency(scopedCandidates, ENRICH_CONCURRENCY, enrichArchiveCandidate)).flat();
+
+  enrichedCache.set(cacheKey, enriched);
+  logInfo("Archive candidate enrichment completed", {
+    candidates: scopedCandidates.length,
+    enriched: enriched.length,
+    durationMs: Date.now() - startedAt
+  });
   return enriched;
 }
 
+async function enrichArchiveCandidate(candidate: DownloadCandidate): Promise<DownloadCandidate[]> {
+  const archiveExtension = candidate.files.length === 1 ? extensionOf(candidate.files[0].targetName) : "";
+  if (!candidate.requiresExtraction) {
+    return [candidate];
+  }
+
+  if (archiveExtension !== ".zip") {
+    const label = archiveExtension ? archiveExtension.toUpperCase().slice(1) : "Archive";
+    if (
+      [".7z", ".rar"].includes(archiveExtension) &&
+      canUseJsWasmArchive(candidate.files[0].size) &&
+      candidate.files[0].size !== undefined &&
+      candidate.files[0].size <= MAX_BUFFERED_ARCHIVE_INSPECT_BYTES
+    ) {
+      const inspected = await inspectBufferedArchive(candidate.files[0].sourceUrl, candidate.systemKey);
+      if (inspected.length > 0) {
+        return [{
+          ...candidate,
+          title: titleFromEntry(inspected[0].name, candidate.title),
+          extractedFiles: inspected,
+          fileCount: inspected.length,
+          totalSize: inspected.reduce((sum, entry) => sum + (entry.size ?? 0), 0) || candidate.totalSize,
+          canDownload: true,
+          warnings: [],
+          confidence: Math.min(0.82, candidate.confidence + 0.22),
+          reason: inspected.length === 1
+            ? `${label} contains ${inspected[0].name}`
+            : `${label} contains ${inspected.length} compatible files`
+        }];
+      }
+    }
+
+    const inspectionReason = [".7z", ".rar"].includes(archiveExtension)
+      ? `${label} is not inspected before download because large JS/WASM archive inspection is slow.`
+      : `${label} extraction uses JS/WASM and is currently limited to ${jsWasmArchiveLimitLabel()}.`;
+    return [{
+      ...candidate,
+      canDownload: [".7z", ".rar"].includes(archiveExtension) && canUseJsWasmArchive(candidate.files[0].size),
+      warnings: [inspectionReason],
+      reason: inspectionReason
+    }];
+  }
+
+  const inspected = await inspectZipUrl(candidate.files[0].sourceUrl, candidate.systemKey, candidate.files[0].size);
+  if (!inspected.inspected) {
+    return [{
+      ...candidate,
+      reason: inspected.reason ?? candidate.reason,
+      canDownload: false,
+      warnings: [inspected.reason ?? "Archive could not be inspected before download."]
+    }];
+  }
+
+  if (inspected.entries.length === 0) {
+    return [];
+  }
+
+  const inspectedReason = inspected.entries.length === 1
+    ? `ZIP contains ${inspected.entries[0].name}`
+    : `ZIP contains ${inspected.entries.length} compatible files`;
+
+  return [{
+    ...candidate,
+    title: titleFromEntry(inspected.entries[0].name, candidate.title),
+    extractedFiles: inspected.entries,
+    fileCount: inspected.entries.length,
+    totalSize: inspected.entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0) || candidate.totalSize,
+    canDownload: true,
+    warnings: [],
+    confidence: Math.min(0.88, candidate.confidence + 0.25),
+    reason: inspectedReason
+  }];
+}
+
 async function inspectBufferedArchive(url: string, systemKey: SystemKey): Promise<ArchiveEntry[]> {
-  const response = await fetch(url);
+  const response = await fetchWithRetries(url, {
+    label: "Buffered archive inspection",
+    timeoutMs: 12_000,
+    attempts: 2
+  });
   if (!response.ok) {
+    logWarn("Buffered archive inspection failed", { status: response.status, url });
     return [];
   }
   return inspectJsWasmArchive(new Uint8Array(await response.arrayBuffer()), systemKey);
@@ -103,7 +134,11 @@ async function inspectZipUrl(
     return { inspected: false, entries: [], reason: rangeInspection.reason ?? "ZIP is too large for pre-download inspection" };
   }
 
-  const response = await fetch(url);
+  const response = await fetchWithRetries(url, {
+    label: "ZIP archive inspection",
+    timeoutMs: 15_000,
+    attempts: 2
+  });
   if (!response.ok) {
     return { inspected: false, entries: [], reason: `ZIP inspection failed with HTTP ${response.status}` };
   }
@@ -172,7 +207,10 @@ async function inspectZipCentralDirectory(
 }
 
 async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array | null> {
-  const response = await fetch(url, {
+  const response = await fetchWithRetries(url, {
+    label: "ZIP range inspection",
+    timeoutMs: 10_000,
+    attempts: 2,
     headers: {
       range: `bytes=${start}-${end}`
     }
@@ -223,4 +261,24 @@ function mergeCentralDirectoryAndTail(centralDirectory: Uint8Array, tail: Uint8A
 function titleFromEntry(entryName: string, fallback: string): string {
   const name = entryName.split(/[\\/]/).pop();
   return name ? name.replace(/\.[a-z0-9]+$/i, "") : fallback;
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<U>
+): Promise<U[]> {
+  const results: U[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }

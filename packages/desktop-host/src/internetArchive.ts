@@ -1,4 +1,6 @@
 import { rankSearchResult, sortAndFilterSearchResults, type SearchResult, type SourceFile, type SystemKey } from "@romdeck/core";
+import { logInfo } from "./logger.js";
+import { fetchJson } from "./net.js";
 
 interface AdvancedSearchResponse {
   response?: {
@@ -42,6 +44,7 @@ const SYSTEM_TERMS: Record<SystemKey, string[]> = {
   xbox: ["xbox", "original xbox"],
   xbox360: ["xbox 360", "xbox360"]
 };
+const metadataCache = new Map<string, SourceFile[]>();
 
 export async function searchInternetArchive(systemKey: SystemKey, query: string): Promise<SearchResult[]> {
   const cleanQuery = query.trim();
@@ -63,12 +66,13 @@ export async function searchInternetArchive(systemKey: SystemKey, query: string)
   url.searchParams.set("page", "1");
   url.searchParams.set("output", "json");
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Internet Archive search failed: ${response.status}`);
-  }
-
-  const data = (await response.json()) as AdvancedSearchResponse;
+  const startedAt = Date.now();
+  logInfo("Internet Archive search started", { systemKey, query: cleanQuery });
+  const data = await fetchJson<AdvancedSearchResponse>(url, {
+    label: "Internet Archive search",
+    timeoutMs: 15_000,
+    attempts: 3
+  });
   const results = (data.response?.docs ?? [])
     .filter((doc) => doc.identifier && doc.title)
     .map((doc): SearchResult => {
@@ -93,18 +97,32 @@ export async function searchInternetArchive(systemKey: SystemKey, query: string)
       };
     });
 
-  return sortAndFilterSearchResults(results).slice(0, 24);
+  const sorted = sortAndFilterSearchResults(results).slice(0, 24);
+  logInfo("Internet Archive search completed", {
+    systemKey,
+    query: cleanQuery,
+    results: sorted.length,
+    durationMs: Date.now() - startedAt
+  });
+  return sorted;
 }
 
 export async function fetchInternetArchiveFiles(itemId: string): Promise<SourceFile[]> {
-  const url = `https://archive.org/metadata/${encodeURIComponent(itemId)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Internet Archive metadata failed: ${response.status}`);
+  const cached = metadataCache.get(itemId);
+  if (cached) {
+    logInfo("Internet Archive metadata cache hit", { itemId, files: cached.length });
+    return cached;
   }
 
-  const data = (await response.json()) as MetadataResponse;
-  return (data.files ?? [])
+  const url = `https://archive.org/metadata/${encodeURIComponent(itemId)}`;
+  const startedAt = Date.now();
+  logInfo("Internet Archive metadata started", { itemId });
+  const data = await fetchJson<MetadataResponse>(url, {
+    label: "Internet Archive metadata",
+    timeoutMs: 15_000,
+    attempts: 3
+  });
+  const files = (data.files ?? [])
     .filter((file) => file.name)
     .map((file) => ({
       name: file.name as string,
@@ -112,6 +130,13 @@ export async function fetchInternetArchiveFiles(itemId: string): Promise<SourceF
       format: file.format,
       source: file.source
     }));
+  metadataCache.set(itemId, files);
+  logInfo("Internet Archive metadata completed", {
+    itemId,
+    files: files.length,
+    durationMs: Date.now() - startedAt
+  });
+  return files;
 }
 
 function flatten(value: string | string[] | undefined): string {

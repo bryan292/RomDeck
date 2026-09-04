@@ -365,9 +365,17 @@ small {
   padding: 12px;
 }
 
+.results-panel,
+.candidate-panel,
+.downloads-panel,
+.installed-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .inspector {
   display: grid;
-  grid-template-rows: auto minmax(180px, 1fr) minmax(140px, 0.7fr);
+  grid-template-rows: auto minmax(160px, 1fr) minmax(120px, 0.55fr);
   gap: 12px;
 }
 
